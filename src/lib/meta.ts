@@ -31,6 +31,16 @@ export const REGION_META: Record<string, string> = {
   SYD: "Syd",
 };
 
+export const STATUS_COLOR: Record<string, string> = {
+  NY: "#5b9df5",
+  HOS_TA: "#f0973d",
+  TA_KLAR: "#a78bfa",
+  TILLSTAND_SOKT: "#f0973d",
+  TILLSTAND_AVSLAG: "#f16a5d",
+  TILLSTAND_BEVILJAT: "#3fb87f",
+  AVSLUTAT: "#8b93a7",
+};
+
 export const STATUS_ORDER = [
   "NY",
   "HOS_TA",
