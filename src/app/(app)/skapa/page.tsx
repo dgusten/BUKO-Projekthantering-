@@ -1,8 +1,14 @@
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { requireUser } from "@/lib/session";
 import { REGION_META } from "@/lib/meta";
 import { createCase } from "@/app/actions";
+import SketchMap from "@/components/SketchMap";
 
 export default async function SkapaArendePage() {
+  const user = await requireUser();
+  if (user.role !== "PL" && user.role !== "ADMIN") redirect("/");
+
   const taUsers = await prisma.user.findMany({ where: { role: "TA" }, orderBy: { name: "asc" } });
   const activeCounts = await prisma.case.groupBy({
     by: ["tilldeladTAId"],
@@ -97,8 +103,14 @@ export default async function SkapaArendePage() {
                 <div className="hint">Kan även tilldelas senare från ärendesidan.</div>
               </div>
 
-              <div className="hint" style={{ marginBottom: 16 }}>
-                Kartskiss/typritning är inte inkopplat i den riktiga appen ännu – finns i prototypen.
+              <div className="form-group">
+                <label>Arbetsområde – typskiss i kartvy</label>
+                <SketchMap name="karta" editable />
+                <div className="hint">
+                  Klicka på markörsymbolen för att markera adressen, rita linjer/polygoner/rektanglar/cirklar för att
+                  skissa arbetsområdet, välj färg för att visa olika saker (t.ex. röd = avstängning, blå = gångväg),
+                  eller lägg till textetiketter för tydlighet. TA-plansritaren ser skissen på ärendet.
+                </div>
               </div>
 
               <div className="form-actions">

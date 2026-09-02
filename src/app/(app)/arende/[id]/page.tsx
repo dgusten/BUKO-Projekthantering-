@@ -1,14 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
+import { requireUser } from "@/lib/session";
 import { STATUS_META, SEVERITY_META, REGION_META, formatDate } from "@/lib/meta";
 import { addComment, assignTA, transitionStatus, saveTillstand } from "@/app/actions";
 import { tillstandStatus, mailtoReminder } from "@/lib/tillstand";
+import SketchMap from "@/components/SketchMap";
 
 export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
   const { id } = await props.params;
-  const user = (await getCurrentUser())!;
+  const user = await requireUser();
 
   const c = await prisma.case.findUnique({
     where: { id },
@@ -30,6 +31,12 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
   const isOwnerPL = user.id === c.skapadAvId || user.role === "ADMIN";
   const isAssignedTA = user.id === c.tilldeladTAId || user.role === "ADMIN";
   const reachedTaKlar = c.statusLog.some((s) => s.status === "TA_KLAR");
+  let karta = null;
+  try {
+    karta = c.karta ? JSON.parse(c.karta) : null;
+  } catch {
+    karta = null;
+  }
 
   const taUsers = c.status === "NY" ? await prisma.user.findMany({ where: { role: "TA" }, orderBy: { name: "asc" } }) : [];
 
@@ -115,6 +122,11 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
                   </div>
                   <div className="desc-block">{c.beskrivning}</div>
                 </div>
+              </div>
+
+              <div className="card card-pad" style={{ marginBottom: 16 }}>
+                <div className="section-title">Karta &amp; arbetsområde</div>
+                <SketchMap initialValue={karta} editable={false} />
               </div>
 
               {c.linksFrom.length > 0 && (

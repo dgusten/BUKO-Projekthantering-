@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
+import { requireUser } from "@/lib/session";
 import { STATUS_META, REGION_META, formatDate } from "@/lib/meta";
 import type { Prisma } from "@prisma/client";
 
 export default async function Home() {
-  const user = (await getCurrentUser())!;
+  const user = await requireUser();
 
   const where: Prisma.CaseWhereInput =
     user.role === "ADMIN" ? {} : user.role === "PL" ? { skapadAvId: user.id } : { tilldeladTAId: user.id };

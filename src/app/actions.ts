@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser, setSessionUser, clearSession } from "@/lib/session";
+import { setSessionUser, clearSession, requireUser } from "@/lib/session";
 
 export async function loginAs(formData: FormData) {
   const userId = String(formData.get("userId") || "");
@@ -17,18 +17,13 @@ export async function logout() {
   redirect("/login");
 }
 
-async function requireUser() {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  return user;
-}
-
 function nextCaseNumber() {
   return prisma.case.count().then((n) => "BUKO-" + (1001 + n));
 }
 
 export async function createCase(formData: FormData) {
   const user = await requireUser();
+  if (user.role !== "PL" && user.role !== "ADMIN") throw new Error("Endast projektledare kan skapa ärenden.");
 
   const titel = String(formData.get("titel") || "").trim();
   const kund = String(formData.get("kund") || "").trim();
@@ -39,6 +34,7 @@ export async function createCase(formData: FormData) {
   const svarighetsgrad = String(formData.get("svarighetsgrad") || "MEDEL");
   const deadlineRaw = String(formData.get("deadline") || "");
   const tilldeladTAId = String(formData.get("tilldeladTA") || "") || null;
+  const kartaRaw = String(formData.get("karta") || "");
 
   if (!titel || !kund || !adress || !beskrivning) {
     throw new Error("Fyll i kund, titel, adress och beskrivning.");
@@ -59,6 +55,7 @@ export async function createCase(formData: FormData) {
       beskrivning,
       svarighetsgrad,
       deadline: deadlineRaw ? new Date(deadlineRaw) : null,
+      karta: kartaRaw || null,
       status,
       skapadAvId: user.id,
       tilldeladTAId,
@@ -99,8 +96,14 @@ export async function assignTA(caseId: string, formData: FormData) {
   const user = await requireUser();
   const taId = String(formData.get("taId") || "");
   if (!taId) return;
-  const ta = await prisma.user.findUnique({ where: { id: taId } });
-  if (!ta) return;
+
+  const [ta, current] = await Promise.all([
+    prisma.user.findUnique({ where: { id: taId } }),
+    prisma.case.findUnique({ where: { id: caseId } }),
+  ]);
+  if (!ta || !current) return;
+  const isOwnerPL = user.id === current.skapadAvId || user.role === "ADMIN";
+  if (!isOwnerPL) throw new Error("Du kan bara tilldela ärenden du äger.");
 
   const now = new Date();
   await prisma.case.update({
@@ -118,6 +121,17 @@ export async function assignTA(caseId: string, formData: FormData) {
 
 export async function transitionStatus(caseId: string, newStatus: string, historyText: string) {
   const user = await requireUser();
+
+  const current = await prisma.case.findUnique({ where: { id: caseId } });
+  if (!current) return;
+  const isOwnerPL = user.id === current.skapadAvId || user.role === "ADMIN";
+  const isAssignedTA = user.id === current.tilldeladTAId || user.role === "ADMIN";
+
+  const allowed =
+    (current.status === "HOS_TA" && isAssignedTA) ||
+    (["TA_KLAR", "TILLSTAND_SOKT", "TILLSTAND_AVSLAG", "TILLSTAND_BEVILJAT"].includes(current.status) && isOwnerPL);
+  if (!allowed) throw new Error("Du har inte behörighet att göra den här ändringen.");
+
   const now = new Date();
 
   await prisma.case.update({
