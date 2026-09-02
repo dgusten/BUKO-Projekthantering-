@@ -1,0 +1,31 @@
+// Speglar STATUS_META / SEVERITY_META / REGION_META i den statiska prototypens app.js.
+// Håll dessa i synk om nya statusar/värden läggs till där.
+
+export const STATUS_META: Record<string, { label: string; badge: string }> = {
+  NY: { label: "Nytt ärende", badge: "badge-ny" },
+  HOS_TA: { label: "Hos TA-plansritare", badge: "badge-hos_ta" },
+  TA_KLAR: { label: "TA-plan klar – hos PL", badge: "badge-ta_klar" },
+  TILLSTAND_SOKT: { label: "Tillstånd sökt", badge: "badge-tillstand_sokt" },
+  TILLSTAND_AVSLAG: { label: "Tillstånd avslaget", badge: "badge-tillstand_avslag" },
+  TILLSTAND_BEVILJAT: { label: "Tillstånd beviljat", badge: "badge-tillstand_beviljat" },
+  AVSLUTAT: { label: "Avslutat", badge: "badge-avslutat" },
+};
+
+export const SEVERITY_META: Record<string, { label: string; color: string; bg: string }> = {
+  LATT: { label: "Lätt", color: "#3fb87f", bg: "rgba(63, 184, 127, 0.14)" },
+  MEDEL: { label: "Medel", color: "#f0973d", bg: "rgba(240, 151, 61, 0.14)" },
+  SVAR: { label: "Svår", color: "#f16a5d", bg: "rgba(241, 106, 93, 0.14)" },
+};
+
+export const REGION_META: Record<string, string> = {
+  NORD: "Nord",
+  MITT: "Mitt",
+  EAST: "East",
+  VAST: "Väst",
+  SYD: "Syd",
+};
+
+export function formatDate(d: Date | string | null | undefined) {
+  if (!d) return "–";
+  return new Date(d).toLocaleDateString("sv-SE", { day: "2-digit", month: "short", year: "numeric" });
+}

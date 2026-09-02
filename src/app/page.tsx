@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { STATUS_META, REGION_META, formatDate } from "@/lib/meta";
 
 export default async function Home() {
   const cases = await prisma.case.findMany({
@@ -6,39 +8,76 @@ export default async function Home() {
     include: { skapadAv: true, tilldeladTA: true },
   });
 
+  const counts = { total: cases.length, hosTa: 0, tillstandSokt: 0, avslutat: 0 };
+  for (const c of cases) {
+    if (c.status === "HOS_TA") counts.hosTa++;
+    if (c.status === "TILLSTAND_SOKT") counts.tillstandSokt++;
+    if (c.status === "AVSLUTAT") counts.avslutat++;
+  }
+
   return (
-    <main style={{ fontFamily: "system-ui, sans-serif", maxWidth: 900, margin: "40px auto", padding: "0 20px" }}>
-      <h1>BUKO Sverige – Ärenden (från databasen)</h1>
-      <p style={{ color: "#666" }}>
-        Denna sida bevisar att hela kedjan fungerar: SQLite-databas → Prisma → Next.js server component.
-        Detta är grunden för den riktiga appen — inte den slutgiltiga designen än.
-      </p>
-      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 24 }}>
-        <thead>
-          <tr style={{ textAlign: "left", borderBottom: "2px solid #ddd" }}>
-            <th style={{ padding: 8 }}>Ärende</th>
-            <th style={{ padding: 8 }}>Kund</th>
-            <th style={{ padding: 8 }}>Jobbnummer</th>
-            <th style={{ padding: 8 }}>Status</th>
-            <th style={{ padding: 8 }}>PL</th>
-            <th style={{ padding: 8 }}>TA-plansritare</th>
-          </tr>
-        </thead>
-        <tbody>
-          {cases.map((c) => (
-            <tr key={c.id} style={{ borderBottom: "1px solid #eee" }}>
-              <td style={{ padding: 8 }}>
-                <strong>{c.id}</strong> — {c.titel}
-              </td>
-              <td style={{ padding: 8 }}>{c.kund}</td>
-              <td style={{ padding: 8 }}>{c.jobbnummer || "–"}</td>
-              <td style={{ padding: 8 }}>{c.status}</td>
-              <td style={{ padding: 8 }}>{c.skapadAv.name}</td>
-              <td style={{ padding: 8 }}>{c.tilldeladTA?.name ?? "Ej tilldelad"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </main>
+    <>
+      <div className="topbar">
+        <h1>Alla ärenden</h1>
+        <span className="crumb">BUKO Sverige / Ärenden</span>
+      </div>
+      <div className="content">
+        <div className="content-inner">
+          <div className="page-header">
+            <div>
+              <h2>Alla ärenden</h2>
+              <p>Data hämtad live från databasen – detta är den riktiga appen, inte prototypen.</p>
+            </div>
+          </div>
+
+          <div className="stat-row">
+            <div className="stat-card">
+              <div className="num">{counts.total}</div>
+              <div className="label">Totalt</div>
+            </div>
+            <div className="stat-card">
+              <div className="num">{counts.hosTa}</div>
+              <div className="label">Hos TA-plansritare</div>
+            </div>
+            <div className="stat-card">
+              <div className="num">{counts.tillstandSokt}</div>
+              <div className="label">Väntar tillstånd</div>
+            </div>
+            <div className="stat-card">
+              <div className="num">{counts.avslutat}</div>
+              <div className="label">Avslutade</div>
+            </div>
+          </div>
+
+          <div className="case-list">
+            {cases.map((c) => {
+              const status = STATUS_META[c.status];
+              return (
+                <Link key={c.id} href={`/arende/${c.id}`} className="case-row">
+                  <div className="case-row-main">
+                    <div className="case-row-title">
+                      <span className="case-id">{c.id}</span> {c.titel}
+                    </div>
+                    <div className="case-row-meta">
+                      <span>📍 {c.adress}</span>
+                      <span>🧭 {c.region ? REGION_META[c.region] : "Ingen region"}</span>
+                      <span>👤 PL: {c.skapadAv.name}</span>
+                      <span>✏️ TA: {c.tilldeladTA?.name ?? "Ej tilldelad"}</span>
+                      <span>📅 {formatDate(c.deadline)}</span>
+                    </div>
+                  </div>
+                  <div className="case-row-right">
+                    <span className={`badge ${status.badge}`}>
+                      <span className="dot" />
+                      {status.label}
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
