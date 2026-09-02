@@ -1,6 +1,12 @@
 // Speglar STATUS_META / SEVERITY_META / REGION_META i den statiska prototypens app.js.
 // Håll dessa i synk om nya statusar/värden läggs till där.
 
+export const ROLE_LABEL: Record<string, string> = {
+  ADMIN: "Admin",
+  PL: "Projektledare",
+  TA: "TA-plansritare",
+};
+
 export const STATUS_META: Record<string, { label: string; badge: string }> = {
   NY: { label: "Nytt ärende", badge: "badge-ny" },
   HOS_TA: { label: "Hos TA-plansritare", badge: "badge-hos_ta" },

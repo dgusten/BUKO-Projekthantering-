@@ -2,6 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ROLE_LABEL } from "@/lib/meta";
+import { logout } from "@/app/actions";
+
+type SidebarUser = {
+  id: string;
+  name: string;
+  role: string;
+  initials: string;
+};
 
 const NAV_ITEMS = [
   { href: "/", label: "Alla ärenden", icon: "\u{1F4C1}" },
@@ -10,7 +19,7 @@ const NAV_ITEMS = [
   { href: "/statistik", label: "Statistik", icon: "\u{1F4CA}" },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ user }: { user: SidebarUser }) {
   const pathname = usePathname();
 
   return (
@@ -34,16 +43,25 @@ export default function Sidebar() {
         </Link>
       ))}
 
+      {user.role === "PL" && (
+        <Link href="/skapa" className={`nav-item ${pathname === "/skapa" ? "active" : ""}`}>
+          <span className="dot" />➕ Skapa ärende
+        </Link>
+      )}
+
       <div className="sidebar-footer">
         <div className="current-user">
-          <span className="avatar" style={{ background: "var(--ink-faint)" }}>
-            ?
-          </span>
+          <span className="avatar">{user.initials}</span>
           <span>
-            <div className="current-user-name">Inloggning ej inkopplad</div>
-            <div className="current-user-role">Byggs i nästa steg</div>
+            <div className="current-user-name">{user.name}</div>
+            <div className="current-user-role">{ROLE_LABEL[user.role]}</div>
           </span>
         </div>
+        <form action={logout}>
+          <button type="submit" className="switch-user-btn">
+            Byt användare
+          </button>
+        </form>
       </div>
     </aside>
   );

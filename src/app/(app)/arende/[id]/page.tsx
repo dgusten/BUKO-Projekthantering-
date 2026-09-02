@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/session";
 import { STATUS_META, SEVERITY_META, REGION_META, formatDate } from "@/lib/meta";
+import { addComment, assignTA, transitionStatus } from "@/app/actions";
 
 export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
   const { id } = await props.params;
+  const user = (await getCurrentUser())!;
 
   const c = await prisma.case.findUnique({
     where: { id },
@@ -21,6 +24,20 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
 
   const status = STATUS_META[c.status];
   const severity = SEVERITY_META[c.svarighetsgrad];
+  const isOwnerPL = user.id === c.skapadAvId || user.role === "ADMIN";
+  const isAssignedTA = user.id === c.tilldeladTAId || user.role === "ADMIN";
+
+  const taUsers = c.status === "NY" ? await prisma.user.findMany({ where: { role: "TA" }, orderBy: { name: "asc" } }) : [];
+
+  const addCommentForCase = addComment.bind(null, c.id);
+  const assignTAForCase = assignTA.bind(null, c.id);
+  const goTaKlar = transitionStatus.bind(null, c.id, "TA_KLAR", "TA-plan klar, skickat till projektledare");
+  const goTillstandSokt = transitionStatus.bind(null, c.id, "TILLSTAND_SOKT", "Ansökan om tillstånd inskickad");
+  const goJustering = transitionStatus.bind(null, c.id, "HOS_TA", "Skickat tillbaka till TA-plansritare för justering");
+  const goBeviljat = transitionStatus.bind(null, c.id, "TILLSTAND_BEVILJAT", "Tillstånd beviljat");
+  const goAvslag = transitionStatus.bind(null, c.id, "TILLSTAND_AVSLAG", "Tillstånd avslaget");
+  const goTillbakaEfterAvslag = transitionStatus.bind(null, c.id, "HOS_TA", "Skickat tillbaka till TA-plansritare efter avslag");
+  const goAvslutat = transitionStatus.bind(null, c.id, "AVSLUTAT", "Ärende avslutat");
 
   return (
     <>
@@ -133,11 +150,113 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
                     </div>
                   ))}
                 </div>
-                <div className="hint">Att skriva nya kommentarer kräver inloggning, som inte är inkopplad än.</div>
+                <form action={addCommentForCase}>
+                  <div className="form-group" style={{ marginBottom: 10 }}>
+                    <textarea name="text" placeholder="Skriv en kommentar..." style={{ minHeight: 64 }} />
+                  </div>
+                  <button type="submit" className="btn btn-primary btn-sm">
+                    Skicka kommentar
+                  </button>
+                </form>
               </div>
             </div>
 
             <div>
+              <div className="card card-pad action-panel" style={{ marginBottom: 16 }}>
+                <div className="section-title">Åtgärder</div>
+
+                {c.status === "NY" && (
+                  <form action={assignTAForCase}>
+                    <div className="form-group">
+                      <label>Tilldela TA-plansritare</label>
+                      <select name="taId" defaultValue="">
+                        <option value="" disabled>
+                          Välj...
+                        </option>
+                        {taUsers.map((x) => (
+                          <option key={x.id} value={x.id}>
+                            {x.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <button type="submit" className="btn btn-primary btn-block">
+                      Tilldela
+                    </button>
+                  </form>
+                )}
+
+                {c.status === "HOS_TA" && isAssignedTA && (
+                  <form action={goTaKlar}>
+                    <button type="submit" className="btn btn-primary btn-block">
+                      Skicka tillbaka till projektledare
+                    </button>
+                  </form>
+                )}
+
+                {c.status === "TA_KLAR" && isOwnerPL && (
+                  <>
+                    <form action={goTillstandSokt}>
+                      <button type="submit" className="btn btn-primary btn-block">
+                        Ansök om tillstånd
+                      </button>
+                    </form>
+                    <form action={goJustering}>
+                      <button type="submit" className="btn btn-block">
+                        Begär justering av TA-plan
+                      </button>
+                    </form>
+                  </>
+                )}
+
+                {c.status === "TILLSTAND_SOKT" && isOwnerPL && (
+                  <>
+                    <form action={goBeviljat}>
+                      <button type="submit" className="btn btn-primary btn-block">
+                        Markera tillstånd beviljat
+                      </button>
+                    </form>
+                    <form action={goAvslag}>
+                      <button type="submit" className="btn btn-danger btn-block">
+                        Markera tillstånd avslaget
+                      </button>
+                    </form>
+                  </>
+                )}
+
+                {c.status === "TILLSTAND_AVSLAG" && isOwnerPL && (
+                  <>
+                    <form action={goTillbakaEfterAvslag}>
+                      <button type="submit" className="btn btn-primary btn-block">
+                        Skicka tillbaka till TA-plansritare
+                      </button>
+                    </form>
+                    <form action={goAvslutat}>
+                      <button type="submit" className="btn btn-block">
+                        Avsluta ärende
+                      </button>
+                    </form>
+                  </>
+                )}
+
+                {c.status === "TILLSTAND_BEVILJAT" && isOwnerPL && (
+                  <form action={goAvslutat}>
+                    <button type="submit" className="btn btn-primary btn-block">
+                      Avsluta ärende
+                    </button>
+                  </form>
+                )}
+
+                {!(
+                  c.status === "NY" ||
+                  (c.status === "HOS_TA" && isAssignedTA) ||
+                  (c.status === "TA_KLAR" && isOwnerPL) ||
+                  (c.status === "TILLSTAND_SOKT" && isOwnerPL) ||
+                  (c.status === "TILLSTAND_AVSLAG" && isOwnerPL) ||
+                  (c.status === "TILLSTAND_BEVILJAT" && isOwnerPL)
+                ) && <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>Inga åtgärder tillgängliga för dig i detta steg.</p>}
+              </div>
+
               <div className="card card-pad">
                 <div className="section-title">Historik</div>
                 <div className="timeline">

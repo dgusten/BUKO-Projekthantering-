@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
 
 export const metadata: Metadata = {
   title: "BUKO Sverige – Ärendehantering",
@@ -10,12 +9,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="sv">
-      <body>
-        <div className="shell">
-          <Sidebar />
-          <div className="main">{children}</div>
-        </div>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
