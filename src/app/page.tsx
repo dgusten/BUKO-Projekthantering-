@@ -1,69 +1,44 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+import { prisma } from "@/lib/prisma";
 
-export default function Home() {
+export default async function Home() {
+  const cases = await prisma.case.findMany({
+    orderBy: { uppdaterad: "desc" },
+    include: { skapadAv: true, tilldeladTA: true },
+  });
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>
-            To get started, edit the{" "}
-            <code className={styles.code}>page.tsx</code> file.
-          </h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <main style={{ fontFamily: "system-ui, sans-serif", maxWidth: 900, margin: "40px auto", padding: "0 20px" }}>
+      <h1>BUKO Sverige – Ärenden (från databasen)</h1>
+      <p style={{ color: "#666" }}>
+        Denna sida bevisar att hela kedjan fungerar: SQLite-databas → Prisma → Next.js server component.
+        Detta är grunden för den riktiga appen — inte den slutgiltiga designen än.
+      </p>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 24 }}>
+        <thead>
+          <tr style={{ textAlign: "left", borderBottom: "2px solid #ddd" }}>
+            <th style={{ padding: 8 }}>Ärende</th>
+            <th style={{ padding: 8 }}>Kund</th>
+            <th style={{ padding: 8 }}>Jobbnummer</th>
+            <th style={{ padding: 8 }}>Status</th>
+            <th style={{ padding: 8 }}>PL</th>
+            <th style={{ padding: 8 }}>TA-plansritare</th>
+          </tr>
+        </thead>
+        <tbody>
+          {cases.map((c) => (
+            <tr key={c.id} style={{ borderBottom: "1px solid #eee" }}>
+              <td style={{ padding: 8 }}>
+                <strong>{c.id}</strong> — {c.titel}
+              </td>
+              <td style={{ padding: 8 }}>{c.kund}</td>
+              <td style={{ padding: 8 }}>{c.jobbnummer || "–"}</td>
+              <td style={{ padding: 8 }}>{c.status}</td>
+              <td style={{ padding: 8 }}>{c.skapadAv.name}</td>
+              <td style={{ padding: 8 }}>{c.tilldeladTA?.name ?? "Ej tilldelad"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </main>
   );
 }

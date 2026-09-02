@@ -1,0 +1,165 @@
+// BUKO Sverige ärendehantering — databasschema
+// Speglar datamodellen från den statiska prototypen (buko-hemsida/app.js) rakt av,
+// plus de senaste tilläggen: jobbnummer och koppling mellan ärenden (etapper/faser).
+//
+// Lokalt: SQLite (fil, inget serverberoende). Produktion: byt datasource provider
+// till "sqlserver" (Azure SQL) eller "postgresql" när ni är redo att driftsätta.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// SQLite (lokal dev) stödjer inte riktiga enum-typer i Prisma, så dessa fält är
+// String lokalt och begränsas i applikationskoden istället. Tillåtna värden:
+//   Role:       ADMIN | PL | TA
+//   CaseStatus: NY | HOS_TA | TA_KLAR | TILLSTAND_SOKT | TILLSTAND_AVSLAG | TILLSTAND_BEVILJAT | AVSLUTAT
+//   Severity:   LATT | MEDEL | SVAR
+//   Region:     NORD | MITT | EAST | VAST | SYD
+// Byt till riktiga `enum`-block igen när datasource blir "sqlserver" eller "postgresql".
+
+model User {
+  id       String  @id @default(cuid())
+  name     String
+  email    String? @unique
+  role     String
+  initials String
+
+  createdCases   Case[]          @relation("CreatedBy")
+  assignedCases  Case[]          @relation("AssignedTo")
+  comments       Comment[]
+  historyEntries HistoryEntry[]
+  uploadedFiles  FileAttachment[]
+
+  createdAt DateTime @default(now())
+}
+
+model Case {
+  // Behåller samma läsbara format som prototypen, t.ex. "BUKO-1009".
+  id String @id
+
+  titel          String
+  kund           String
+  jobbnummer     String?
+  adress         String
+  region         String?
+  beskrivning    String
+  svarighetsgrad String    @default("MEDEL")
+  deadline       DateTime?
+  status         String    @default("NY")
+  karta          String? // GeoJSON, sparas som text
+
+  skapadAv   User   @relation("CreatedBy", fields: [skapadAvId], references: [id])
+  skapadAvId String
+
+  tilldeladTA   User?   @relation("AssignedTo", fields: [tilldeladTAId], references: [id])
+  tilldeladTAId String?
+
+  skapad     DateTime @default(now())
+  uppdaterad DateTime @updatedAt
+
+  comments       Comment[]
+  files          FileAttachment[]
+  historyEntries HistoryEntry[]
+  statusLog      StatusLogEntry[]
+  tillstand      Tillstand?
+
+  // Koppling mellan ärenden (etapper/faser av samma projekt).
+  linksFrom CaseLink[] @relation("LinkFrom")
+  linksTo   CaseLink[] @relation("LinkTo")
+
+  @@index([skapadAvId])
+  @@index([tilldeladTAId])
+  @@index([status])
+}
+
+// En rad per riktning så en koppling alltid är sökbar från båda ärendena
+// utan en extra join-fråga. linkCase()/unlinkCase() i API:t skriver båda raderna
+// samtidigt, precis som prototypens bidirektionella lankadeArenden-lista.
+model CaseLink {
+  id String @id @default(cuid())
+
+  case   Case   @relation("LinkFrom", fields: [caseId], references: [id], onDelete: Cascade)
+  caseId String
+
+  linked   Case   @relation("LinkTo", fields: [linkedId], references: [id], onDelete: Cascade)
+  linkedId String
+
+  @@unique([caseId, linkedId])
+}
+
+model Comment {
+  id    String   @id @default(cuid())
+  text  String
+  datum DateTime @default(now())
+
+  case   Case   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  caseId String
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+
+  @@index([caseId])
+}
+
+model FileAttachment {
+  id      String   @id @default(cuid())
+  namn    String
+  storlek Int
+  typ     String
+  // Riktig lagring (t.ex. Azure Blob Storage) istället för base64 i localStorage.
+  url     String
+  datum   DateTime @default(now())
+
+  case   Case   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  caseId String
+
+  uppladdadAv   User   @relation(fields: [uppladdadAvId], references: [id])
+  uppladdadAvId String
+
+  @@index([caseId])
+}
+
+model HistoryEntry {
+  id    String   @id @default(cuid())
+  text  String
+  datum DateTime @default(now())
+
+  case   Case   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  caseId String
+
+  user   User?   @relation(fields: [userId], references: [id])
+  userId String?
+
+  @@index([caseId])
+}
+
+// Motsvarar prototypens statusLog[] — en rad per statusövergång, används för att
+// räkna ut ritningstid per TA-plansritare på statistiksidan.
+model StatusLogEntry {
+  id     String   @id @default(cuid())
+  status String
+  datum  DateTime @default(now())
+
+  case   Case   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  caseId String
+
+  @@index([caseId])
+}
+
+model Tillstand {
+  id String @id @default(cuid())
+
+  case   Case   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  caseId String @unique
+
+  startdatum           DateTime?
+  slutdatum            DateTime
+  kundKontaktNamn      String?
+  kundKontaktEmail     String?
+  paminnelseDagarInnan Int       @default(14)
+}
