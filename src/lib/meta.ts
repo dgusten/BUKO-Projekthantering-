@@ -31,6 +31,16 @@ export const REGION_META: Record<string, string> = {
   SYD: "Syd",
 };
 
+export const STATUS_ORDER = [
+  "NY",
+  "HOS_TA",
+  "TA_KLAR",
+  "TILLSTAND_SOKT",
+  "TILLSTAND_AVSLAG",
+  "TILLSTAND_BEVILJAT",
+  "AVSLUTAT",
+];
+
 export function formatDate(d: Date | string | null | undefined) {
   if (!d) return "–";
   return new Date(d).toLocaleDateString("sv-SE", { day: "2-digit", month: "short", year: "numeric" });

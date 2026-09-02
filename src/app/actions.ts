@@ -131,3 +131,46 @@ export async function transitionStatus(caseId: string, newStatus: string, histor
 
   revalidatePath(`/arende/${caseId}`);
 }
+
+export async function saveTillstand(caseId: string, formData: FormData) {
+  const user = await requireUser();
+
+  const startdatumRaw = String(formData.get("startdatum") || "");
+  const slutdatumRaw = String(formData.get("slutdatum") || "");
+  const kundKontaktNamn = String(formData.get("kundKontaktNamn") || "").trim();
+  const kundKontaktEmail = String(formData.get("kundKontaktEmail") || "").trim();
+  const paminnelseDagarInnan = parseInt(String(formData.get("paminnelseDagarInnan") || "14"), 10) || 14;
+
+  if (!slutdatumRaw) throw new Error("Ange slutdatum för tillståndet.");
+
+  await prisma.tillstand.upsert({
+    where: { caseId },
+    create: {
+      caseId,
+      startdatum: startdatumRaw ? new Date(startdatumRaw) : null,
+      slutdatum: new Date(slutdatumRaw),
+      kundKontaktNamn: kundKontaktNamn || null,
+      kundKontaktEmail: kundKontaktEmail || null,
+      paminnelseDagarInnan,
+    },
+    update: {
+      startdatum: startdatumRaw ? new Date(startdatumRaw) : null,
+      slutdatum: new Date(slutdatumRaw),
+      kundKontaktNamn: kundKontaktNamn || null,
+      kundKontaktEmail: kundKontaktEmail || null,
+      paminnelseDagarInnan,
+    },
+  });
+
+  await prisma.case.update({
+    where: { id: caseId },
+    data: {
+      historyEntries: {
+        create: { text: "Tillstånd registrerat: giltigt till " + new Date(slutdatumRaw).toLocaleDateString("sv-SE"), userId: user.id },
+      },
+    },
+  });
+
+  revalidatePath(`/arende/${caseId}`);
+  revalidatePath("/tillstand");
+}

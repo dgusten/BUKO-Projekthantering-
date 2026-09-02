@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
 import { STATUS_META, SEVERITY_META, REGION_META, formatDate } from "@/lib/meta";
-import { addComment, assignTA, transitionStatus } from "@/app/actions";
+import { addComment, assignTA, transitionStatus, saveTillstand } from "@/app/actions";
+import { tillstandStatus, mailtoReminder } from "@/lib/tillstand";
 
 export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
   const { id } = await props.params;
@@ -17,6 +18,8 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
       comments: { include: { user: true }, orderBy: { datum: "asc" } },
       historyEntries: { include: { user: true }, orderBy: { datum: "desc" } },
       linksFrom: { include: { linked: true } },
+      statusLog: true,
+      tillstand: true,
     },
   });
 
@@ -26,11 +29,13 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
   const severity = SEVERITY_META[c.svarighetsgrad];
   const isOwnerPL = user.id === c.skapadAvId || user.role === "ADMIN";
   const isAssignedTA = user.id === c.tilldeladTAId || user.role === "ADMIN";
+  const reachedTaKlar = c.statusLog.some((s) => s.status === "TA_KLAR");
 
   const taUsers = c.status === "NY" ? await prisma.user.findMany({ where: { role: "TA" }, orderBy: { name: "asc" } }) : [];
 
   const addCommentForCase = addComment.bind(null, c.id);
   const assignTAForCase = assignTA.bind(null, c.id);
+  const saveTillstandForCase = saveTillstand.bind(null, c.id);
   const goTaKlar = transitionStatus.bind(null, c.id, "TA_KLAR", "TA-plan klar, skickat till projektledare");
   const goTillstandSokt = transitionStatus.bind(null, c.id, "TILLSTAND_SOKT", "Ansökan om tillstånd inskickad");
   const goJustering = transitionStatus.bind(null, c.id, "HOS_TA", "Skickat tillbaka till TA-plansritare för justering");
@@ -256,6 +261,107 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
                   (c.status === "TILLSTAND_BEVILJAT" && isOwnerPL)
                 ) && <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>Inga åtgärder tillgängliga för dig i detta steg.</p>}
               </div>
+
+              {reachedTaKlar && (
+                <div className="card card-pad" style={{ marginBottom: 16 }}>
+                  <div className="section-title">Tillstånd</div>
+                  {c.tillstand ? (
+                    <>
+                      <div className="kv-grid" style={{ marginBottom: 14 }}>
+                        <div>
+                          <div className="kv-label">Status</div>
+                          <div className="kv-value">
+                            {(() => {
+                              const s = tillstandStatus(c.tillstand);
+                              return (
+                                <span className={`badge ${s.badge}`}>
+                                  <span className="dot" />
+                                  {s.label} · {s.daysLeft} dagar
+                                </span>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="kv-label">Giltighetstid</div>
+                          <div className="kv-value">
+                            {formatDate(c.tillstand.startdatum)} – {formatDate(c.tillstand.slutdatum)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="kv-label">Kontakt hos kund</div>
+                          <div className="kv-value">{c.tillstand.kundKontaktNamn || "–"}</div>
+                        </div>
+                        <div>
+                          <div className="kv-label">E-post kund</div>
+                          <div className="kv-value">{c.tillstand.kundKontaktEmail || "–"}</div>
+                        </div>
+                      </div>
+                      <a
+                        className="btn btn-sm btn-block"
+                        style={{ marginBottom: 14 }}
+                        href={mailtoReminder({
+                          caseId: c.id,
+                          titel: c.titel,
+                          adress: c.adress,
+                          kund: c.kund,
+                          slutdatumLabel: formatDate(c.tillstand.slutdatum),
+                          plEmail: c.skapadAv.email,
+                          kundKontaktNamn: c.tillstand.kundKontaktNamn,
+                          kundKontaktEmail: c.tillstand.kundKontaktEmail,
+                        })}
+                      >
+                        ✉️ Skicka påminnelse (PL + kund)
+                      </a>
+                    </>
+                  ) : (
+                    <p style={{ fontSize: 12.5, color: "var(--ink-soft)", margin: "0 0 12px" }}>
+                      Inget tillstånd registrerat än.
+                    </p>
+                  )}
+                  <form action={saveTillstandForCase}>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Startdatum</label>
+                        <input
+                          type="date"
+                          name="startdatum"
+                          defaultValue={c.tillstand?.startdatum ? new Date(c.tillstand.startdatum).toISOString().slice(0, 10) : ""}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Slutdatum</label>
+                        <input
+                          type="date"
+                          name="slutdatum"
+                          required
+                          defaultValue={c.tillstand?.slutdatum ? new Date(c.tillstand.slutdatum).toISOString().slice(0, 10) : ""}
+                        />
+                      </div>
+                    </div>
+                    <div className="form-group">
+                      <label>Ansvarig hos kund</label>
+                      <input type="text" name="kundKontaktNamn" placeholder="Namn" defaultValue={c.tillstand?.kundKontaktNamn ?? ""} />
+                    </div>
+                    <div className="form-group">
+                      <label>E-post till kundens ansvarige</label>
+                      <input
+                        type="text"
+                        name="kundKontaktEmail"
+                        placeholder="namn@kund.se"
+                        defaultValue={c.tillstand?.kundKontaktEmail ?? ""}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Påminnelse (dagar innan tillståndet löper ut)</label>
+                      <input type="text" name="paminnelseDagarInnan" defaultValue={c.tillstand?.paminnelseDagarInnan ?? 14} />
+                    </div>
+                    <button type="submit" className="btn btn-primary btn-sm btn-block">
+                      {c.tillstand ? "Uppdatera tillstånd" : "Registrera tillstånd"}
+                    </button>
+                  </form>
+                </div>
+              )}
 
               <div className="card card-pad">
                 <div className="section-title">Historik</div>
