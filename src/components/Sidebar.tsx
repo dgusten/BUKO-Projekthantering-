@@ -25,11 +25,8 @@ export default function Sidebar({ user }: { user: SidebarUser }) {
   return (
     <aside className="sidebar">
       <div className="brand">
-        <span className="logo-mark">BK</span>
-        <div>
-          <strong>BUKO Sverige</strong>
-          <span>Ärendehantering</span>
-        </div>
+        <img src="/logo.png" alt="BUKO Sverige" className="brand-logo" />
+        <span>Ärendehantering</span>
       </div>
 
       {NAV_ITEMS.map((item) => (

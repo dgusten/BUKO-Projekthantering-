@@ -8,8 +8,7 @@ export default async function LoginPage(props: PageProps<"/login">) {
     <div className="login-screen">
       <div className="login-card">
         <div className="login-brand">
-          <span className="logo-mark">BK</span>
-          <strong>BUKO Sverige</strong>
+          <img src="/logo.png" alt="BUKO Sverige" className="login-logo" />
         </div>
         <h1>Ärendehantering – TA-planer</h1>
         <p className="subtitle">Logga in med din e-postadress och ditt lösenord.</p>

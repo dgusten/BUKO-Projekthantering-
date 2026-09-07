@@ -68,18 +68,14 @@ button { font-family: inherit; color: inherit; }
   margin-bottom: 8px;
 }
 
-.login-brand .logo-mark {
-  width: 40px; height: 40px;
-  border-radius: 9px;
-  background: var(--accent);
-  color: white;
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 800;
-  font-size: 15px;
-  flex-shrink: 0;
+.login-brand .login-logo {
+  height: 34px;
+  width: auto;
+  display: block;
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px 14px;
 }
-
-.login-brand strong { font-size: 19px; letter-spacing: -0.02em; }
 
 .login-card h1 {
   font-size: 20px;
@@ -147,21 +143,18 @@ button { font-family: inherit; color: inherit; }
 }
 
 .sidebar .brand {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
   padding: 4px 8px 22px;
 }
-.sidebar .brand .logo-mark {
-  width: 32px; height: 32px;
-  border-radius: 8px;
-  background: var(--accent);
-  color: white;
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 800;
-  font-size: 12.5px;
-  flex-shrink: 0;
+.sidebar .brand .brand-logo {
+  height: 24px;
+  width: auto;
+  display: block;
+  background: #fff;
+  border-radius: 6px;
+  padding: 6px 10px;
 }
-.sidebar .brand strong { font-size: 15.5px; letter-spacing: -0.01em; }
-.sidebar .brand span { display: block; font-size: 10.5px; color: #8792ab; margin-top: 1px; }
+.sidebar .brand span { display: block; font-size: 10.5px; color: #8792ab; padding-left: 2px; }
 
 .nav-item {
   display: flex;
