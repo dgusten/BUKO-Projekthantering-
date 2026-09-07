@@ -2,31 +2,55 @@
 // Speglar datamodellen från den statiska prototypen (buko-hemsida/app.js) rakt av,
 // plus de senaste tilläggen: jobbnummer och koppling mellan ärenden (etapper/faser).
 //
-// Lokalt: SQLite (fil, inget serverberoende). Produktion: byt datasource provider
-// till "sqlserver" (Azure SQL) eller "postgresql" när ni är redo att driftsätta.
+// Databas: Supabase Postgres. directUrl används bara av `prisma migrate` (måste
+// gå via den icke-poolade session-porten 5432 - PgBouncer i transaction-läge på
+// DATABASE_URL stödjer inte de prepared statements migreringar behöver).
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
-// SQLite (lokal dev) stödjer inte riktiga enum-typer i Prisma, så dessa fält är
-// String lokalt och begränsas i applikationskoden istället. Tillåtna värden:
-//   Role:       ADMIN | PL | TA
-//   CaseStatus: NY | HOS_TA | TA_KLAR | TILLSTAND_SOKT | TILLSTAND_AVSLAG | TILLSTAND_BEVILJAT | AVSLUTAT
-//   Severity:   LATT | MEDEL | SVAR
-//   Region:     NORD | MITT | EAST | VAST | SYD
-// Byt till riktiga `enum`-block igen när datasource blir "sqlserver" eller "postgresql".
+enum Role {
+  ADMIN
+  PL
+  TA
+}
+
+enum CaseStatus {
+  NY
+  HOS_TA
+  TA_KLAR
+  TILLSTAND_SOKT
+  TILLSTAND_AVSLAG
+  TILLSTAND_BEVILJAT
+  AVSLUTAT
+}
+
+enum Severity {
+  LATT
+  MEDEL
+  SVAR
+}
+
+enum Region {
+  NORD
+  MITT
+  EAST
+  VAST
+  SYD
+}
 
 model User {
   id       String  @id @default(cuid())
   name     String
   email    String? @unique
-  role     String
+  role     Role
   initials String
 
   createdCases   Case[]          @relation("CreatedBy")
@@ -46,11 +70,11 @@ model Case {
   kund           String
   jobbnummer     String?
   adress         String
-  region         String?
+  region         Region?
   beskrivning    String
-  svarighetsgrad String    @default("MEDEL")
+  svarighetsgrad Severity   @default(MEDEL)
   deadline       DateTime?
-  status         String    @default("NY")
+  status         CaseStatus @default(NY)
   karta          String? // GeoJSON, sparas som text
 
   skapadAv   User   @relation("CreatedBy", fields: [skapadAvId], references: [id])
@@ -111,7 +135,7 @@ model FileAttachment {
   namn    String
   storlek Int
   typ     String
-  // Riktig lagring (t.ex. Azure Blob Storage) istället för base64 i localStorage.
+  // Riktig lagring (Supabase Storage) istället för base64 i localStorage.
   url     String
   datum   DateTime @default(now())
 
@@ -141,9 +165,9 @@ model HistoryEntry {
 // Motsvarar prototypens statusLog[] — en rad per statusövergång, används för att
 // räkna ut ritningstid per TA-plansritare på statistiksidan.
 model StatusLogEntry {
-  id     String   @id @default(cuid())
-  status String
-  datum  DateTime @default(now())
+  id     String     @id @default(cuid())
+  status CaseStatus
+  datum  DateTime   @default(now())
 
   case   Case   @relation(fields: [caseId], references: [id], onDelete: Cascade)
   caseId String

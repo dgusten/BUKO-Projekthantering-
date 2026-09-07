@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { writeFile, mkdir, unlink } from "fs/promises";
 import path from "path";
+import type { Region, Severity, CaseStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { setSessionUser, clearSession, requireUser } from "@/lib/session";
 
@@ -38,9 +39,9 @@ export async function createCase(formData: FormData) {
   const kund = String(formData.get("kund") || "").trim();
   const jobbnummer = String(formData.get("jobbnummer") || "").trim();
   const adress = String(formData.get("adress") || "").trim();
-  const region = String(formData.get("region") || "") || null;
+  const region = (String(formData.get("region") || "") || null) as Region | null;
   const beskrivning = String(formData.get("beskrivning") || "").trim();
-  const svarighetsgrad = String(formData.get("svarighetsgrad") || "MEDEL");
+  const svarighetsgrad = String(formData.get("svarighetsgrad") || "MEDEL") as Severity;
   const deadlineRaw = String(formData.get("deadline") || "");
   const tilldeladTAId = String(formData.get("tilldeladTA") || "") || null;
   const kartaRaw = String(formData.get("karta") || "");
@@ -50,7 +51,7 @@ export async function createCase(formData: FormData) {
   }
 
   const id = await nextCaseNumber();
-  const status = tilldeladTAId ? "HOS_TA" : "NY";
+  const status: CaseStatus = tilldeladTAId ? "HOS_TA" : "NY";
   const now = new Date();
 
   await prisma.case.create({
@@ -128,7 +129,7 @@ export async function assignTA(caseId: string, formData: FormData) {
   revalidatePath(`/arende/${caseId}`);
 }
 
-export async function transitionStatus(caseId: string, newStatus: string, historyText: string) {
+export async function transitionStatus(caseId: string, newStatus: CaseStatus, historyText: string) {
   const user = await requireUser();
 
   const current = await prisma.case.findUnique({ where: { id: caseId } });
