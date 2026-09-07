@@ -42,5 +42,5 @@ next-env.d.ts
 dev.db
 dev.db-journal
 
-# lokal filuppladdning (dev-lagring - byts mot Azure Blob Storage för skarp drift)
+# lokal filuppladdning (oanvänd - filer lagras i Supabase Storage)
 /public/uploads/
