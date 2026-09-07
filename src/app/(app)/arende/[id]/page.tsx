@@ -2,8 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
-import { STATUS_META, SEVERITY_META, REGION_META, formatDate } from "@/lib/meta";
-import { addComment, assignTA, transitionStatus, saveTillstand } from "@/app/actions";
+import { STATUS_META, SEVERITY_META, REGION_META, formatDate, formatBytes } from "@/lib/meta";
+import { addComment, assignTA, transitionStatus, saveTillstand, uploadFiles, removeFile } from "@/app/actions";
 import { tillstandStatus, mailtoReminder } from "@/lib/tillstand";
 import SketchMap from "@/components/SketchMap";
 
@@ -21,6 +21,7 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
       linksFrom: { include: { linked: true } },
       statusLog: true,
       tillstand: true,
+      files: { include: { uppladdadAv: true }, orderBy: { datum: "desc" } },
     },
   });
 
@@ -43,6 +44,7 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
   const addCommentForCase = addComment.bind(null, c.id);
   const assignTAForCase = assignTA.bind(null, c.id);
   const saveTillstandForCase = saveTillstand.bind(null, c.id);
+  const uploadFilesForCase = uploadFiles.bind(null, c.id);
   const goTaKlar = transitionStatus.bind(null, c.id, "TA_KLAR", "TA-plan klar, skickat till projektledare");
   const goTillstandSokt = transitionStatus.bind(null, c.id, "TILLSTAND_SOKT", "Ansökan om tillstånd inskickad");
   const goJustering = transitionStatus.bind(null, c.id, "HOS_TA", "Skickat tillbaka till TA-plansritare för justering");
@@ -127,6 +129,43 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
               <div className="card card-pad" style={{ marginBottom: 16 }}>
                 <div className="section-title">Karta &amp; arbetsområde</div>
                 <SketchMap initialValue={karta} editable={false} />
+              </div>
+
+              <div className="card card-pad" style={{ marginBottom: 16 }}>
+                <div className="section-title">Filer &amp; ritningar</div>
+                <div className="file-list">
+                  {c.files.length === 0 && (
+                    <div style={{ fontSize: 12.5, color: "var(--ink-faint)" }}>Inga filer uppladdade än.</div>
+                  )}
+                  {c.files.map((f) => (
+                    <div className="file-item" key={f.id}>
+                      <span className="file-icon">{(f.namn.split(".").pop() || "?").slice(0, 3).toUpperCase()}</span>
+                      <span className="file-meta">
+                        <div className="file-name">{f.namn}</div>
+                        <div className="file-sub">
+                          {formatBytes(f.storlek)} · uppladdad av {f.uppladdadAv.name}
+                        </div>
+                      </span>
+                      <a href={f.url} download={f.namn} className="btn btn-sm btn-ghost" title="Ladda ner">
+                        ⬇️
+                      </a>
+                      <form action={removeFile.bind(null, c.id, f.id)}>
+                        <button type="submit" className="btn btn-sm btn-ghost" title="Ta bort">
+                          ✕
+                        </button>
+                      </form>
+                    </div>
+                  ))}
+                </div>
+                <form action={uploadFilesForCase} className="form-row" style={{ alignItems: "end" }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label>Ladda upp fil (ritning, PDF, bild)</label>
+                    <input type="file" name="files" multiple />
+                  </div>
+                  <button type="submit" className="btn btn-primary" style={{ marginBottom: 0 }}>
+                    Ladda upp
+                  </button>
+                </form>
               </div>
 
               {c.linksFrom.length > 0 && (

@@ -51,6 +51,12 @@ export const STATUS_ORDER = [
   "AVSLUTAT",
 ];
 
+export function formatBytes(n: number) {
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return Math.round(n / 1024) + " KB";
+  return (n / 1024 / 1024).toFixed(1) + " MB";
+}
+
 export function formatDate(d: Date | string | null | undefined) {
   if (!d) return "–";
   return new Date(d).toLocaleDateString("sv-SE", { day: "2-digit", month: "short", year: "numeric" });

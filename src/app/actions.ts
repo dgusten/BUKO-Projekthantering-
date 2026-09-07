@@ -2,8 +2,17 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { writeFile, mkdir, unlink } from "fs/promises";
+import path from "path";
 import { prisma } from "@/lib/prisma";
 import { setSessionUser, clearSession, requireUser } from "@/lib/session";
+
+// Lokal filsystemslagring för utveckling. Byt ut mot Azure Blob Storage (eller
+// motsvarande) innan skarp drift - den här katalogen finns bara på den här
+// maskinen och skulle inte överleva en driftsättning på t.ex. Vercel/Azure
+// App Service, där filsystemet inte är beständigt mellan omstarter.
+const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 export async function loginAs(formData: FormData) {
   const userId = String(formData.get("userId") || "");
@@ -187,4 +196,61 @@ export async function saveTillstand(caseId: string, formData: FormData) {
 
   revalidatePath(`/arende/${caseId}`);
   revalidatePath("/tillstand");
+}
+
+export async function uploadFiles(caseId: string, formData: FormData) {
+  const user = await requireUser();
+  const files = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
+  if (!files.length) return;
+
+  for (const file of files) {
+    if (file.size > MAX_FILE_BYTES) throw new Error(`${file.name} är för stor (max 10 MB).`);
+  }
+
+  await mkdir(UPLOAD_DIR, { recursive: true });
+
+  for (const file of files) {
+    const ext = path.extname(file.name);
+    const storedName = `${crypto.randomUUID()}${ext}`;
+    const buffer = Buffer.from(await file.arrayBuffer());
+    await writeFile(path.join(UPLOAD_DIR, storedName), buffer);
+
+    await prisma.fileAttachment.create({
+      data: {
+        namn: file.name,
+        storlek: file.size,
+        typ: file.type || "application/octet-stream",
+        url: `/uploads/${storedName}`,
+        caseId,
+        uppladdadAvId: user.id,
+      },
+    });
+  }
+
+  await prisma.case.update({
+    where: { id: caseId },
+    data: {
+      uppdaterad: new Date(),
+      historyEntries: {
+        create: files.map((f) => ({ text: "Laddade upp fil: " + f.name, userId: user.id })),
+      },
+    },
+  });
+
+  revalidatePath(`/arende/${caseId}`);
+}
+
+export async function removeFile(caseId: string, fileId: string) {
+  await requireUser();
+  const file = await prisma.fileAttachment.findUnique({ where: { id: fileId } });
+  if (!file || file.caseId !== caseId) return;
+
+  try {
+    await unlink(path.join(UPLOAD_DIR, path.basename(file.url)));
+  } catch {
+    // already gone from disk - still remove the DB record
+  }
+  await prisma.fileAttachment.delete({ where: { id: fileId } });
+
+  revalidatePath(`/arende/${caseId}`);
 }

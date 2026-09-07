@@ -41,3 +41,6 @@ yarn-error.log*
 next-env.d.ts
 dev.db
 dev.db-journal
+
+# lokal filuppladdning (dev-lagring - byts mot Azure Blob Storage för skarp drift)
+/public/uploads/
