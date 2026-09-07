@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import path from "path";
-import type { Region, Severity, CaseStatus } from "@prisma/client";
+import type { Region, Severity, CaseStatus, Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { createClient, createAdminSupabaseClient, FILES_BUCKET } from "@/lib/supabase/server";
@@ -30,6 +30,52 @@ export async function logout() {
   const supabase = await createClient();
   await supabase.auth.signOut();
   redirect("/login");
+}
+
+function initialsFrom(name: string) {
+  const parts = name.trim().split(/\s+/);
+  const letters = parts.length > 1 ? [parts[0][0], parts[parts.length - 1][0]] : [parts[0]?.[0], parts[0]?.[1]];
+  return letters.filter(Boolean).join("").toUpperCase();
+}
+
+export async function createUser(formData: FormData) {
+  const admin = await requireUser();
+  if (admin.role !== "ADMIN") throw new Error("Endast admin kan skapa användare.");
+
+  const name = String(formData.get("name") || "").trim();
+  const email = String(formData.get("email") || "").trim();
+  const role = String(formData.get("role") || "");
+  const password = String(formData.get("password") || "");
+
+  if (!name || !email || !password) throw new Error("Fyll i namn, e-post och lösenord.");
+  if (role !== "ADMIN" && role !== "PL" && role !== "TA") throw new Error("Ogiltig roll.");
+  if (password.length < 8) throw new Error("Lösenordet måste vara minst 8 tecken.");
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) throw new Error("Det finns redan en användare med den e-postadressen.");
+
+  const supabaseAdmin = createAdminSupabaseClient();
+  const { data, error } = await supabaseAdmin.auth.admin.createUser({ email, password, email_confirm: true });
+  if (error) throw new Error(`Kunde inte skapa inloggningskontot: ${error.message}`);
+
+  await prisma.user.create({
+    data: { name, email, role: role as Role, initials: initialsFrom(name) },
+  });
+
+  try {
+    await sendMail(
+      email,
+      "Ditt konto i BUKO Sverige – Ärendehantering",
+      `<p>Hej ${escapeHtml(name)},</p>` +
+        `<p>Du har fått ett konto i BUKO Sveriges ärendehanteringssystem.</p>` +
+        `<p>E-post: ${escapeHtml(email)}<br/>Tillfälligt lösenord: <strong>${escapeHtml(password)}</strong></p>` +
+        `<p><a href="${APP_URL}/login">Logga in här</a> och byt gärna lösenord vid tillfälle.</p>`
+    );
+  } catch (e) {
+    console.error("Kunde inte skicka välkomstmejl:", e);
+  }
+
+  revalidatePath("/anvandare");
 }
 
 function nextCaseNumber() {

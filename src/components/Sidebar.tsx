@@ -43,9 +43,15 @@ export default function Sidebar({ user }: { user: SidebarUser }) {
         </Link>
       ))}
 
-      {user.role === "PL" && (
+      {(user.role === "PL" || user.role === "ADMIN") && (
         <Link href="/skapa" className={`nav-item ${pathname === "/skapa" ? "active" : ""}`}>
           <span className="dot" />➕ Skapa ärende
+        </Link>
+      )}
+
+      {user.role === "ADMIN" && (
+        <Link href="/anvandare" className={`nav-item ${pathname === "/anvandare" ? "active" : ""}`}>
+          <span className="dot" />👤 Användare
         </Link>
       )}
 
