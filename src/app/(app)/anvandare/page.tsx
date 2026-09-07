@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { ROLE_LABEL } from "@/lib/meta";
-import { createUser } from "@/app/actions";
+import { createUser, deleteUser } from "@/app/actions";
 
 export default async function AnvandarePage() {
   const user = await requireUser();
@@ -67,6 +67,7 @@ export default async function AnvandarePage() {
                     <th>Namn</th>
                     <th>E-post</th>
                     <th>Roll</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -80,6 +81,15 @@ export default async function AnvandarePage() {
                       </td>
                       <td>{u.email}</td>
                       <td>{ROLE_LABEL[u.role]}</td>
+                      <td style={{ textAlign: "right" }}>
+                        {u.id !== user.id && (
+                          <form action={deleteUser.bind(null, u.id)}>
+                            <button type="submit" className="btn btn-sm btn-ghost" title="Ta bort">
+                              ✕
+                            </button>
+                          </form>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

@@ -82,6 +82,37 @@ export async function createUser(formData: FormData) {
   revalidatePath("/anvandare");
 }
 
+export async function deleteUser(userId: string) {
+  const admin = await requireUser();
+  if (admin.role !== "ADMIN") throw new Error("Endast admin kan ta bort användare.");
+  if (admin.id === userId) throw new Error("Du kan inte ta bort ditt eget konto.");
+
+  const target = await prisma.user.findUnique({ where: { id: userId } });
+  if (!target) return;
+
+  const [created, assigned] = await Promise.all([
+    prisma.case.count({ where: { skapadAvId: userId } }),
+    prisma.case.count({ where: { tilldeladTAId: userId } }),
+  ]);
+  if (created > 0 || assigned > 0) {
+    throw new Error(
+      `${target.name} har ${created + assigned} ärende(n) kopplade till sig och kan inte tas bort. Flytta över ärendena till någon annan först.`
+    );
+  }
+
+  const supabaseAdmin = createAdminSupabaseClient();
+  const { data: list, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+  if (listError) throw new Error(`Kunde inte slå upp inloggningskontot: ${listError.message}`);
+  const authUser = list.users.find((u) => u.email === target.email);
+  if (authUser) {
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(authUser.id);
+    if (error) throw new Error(`Kunde inte ta bort inloggningskontot: ${error.message}`);
+  }
+
+  await prisma.user.delete({ where: { id: userId } });
+  revalidatePath("/anvandare");
+}
+
 function nextCaseNumber() {
   return prisma.case.count().then((n) => "BUKO-" + (1001 + n));
 }
