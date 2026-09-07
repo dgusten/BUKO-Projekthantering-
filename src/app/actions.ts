@@ -2,18 +2,12 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { writeFile, mkdir, unlink } from "fs/promises";
 import path from "path";
 import type { Region, Severity, CaseStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminSupabaseClient, FILES_BUCKET } from "@/lib/supabase/server";
 
-// Lokal filsystemslagring för utveckling. Byt ut mot Supabase Storage innan
-// skarp drift - den här katalogen finns bara på den här maskinen och skulle
-// inte överleva en driftsättning på t.ex. Vercel, där filsystemet inte är
-// beständigt mellan omstarter.
-const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 export async function login(formData: FormData) {
@@ -215,20 +209,26 @@ export async function uploadFiles(caseId: string, formData: FormData) {
     if (file.size > MAX_FILE_BYTES) throw new Error(`${file.name} är för stor (max 10 MB).`);
   }
 
-  await mkdir(UPLOAD_DIR, { recursive: true });
+  const supabaseAdmin = createAdminSupabaseClient();
 
   for (const file of files) {
     const ext = path.extname(file.name);
-    const storedName = `${crypto.randomUUID()}${ext}`;
+    const objectPath = `${caseId}/${crypto.randomUUID()}${ext}`;
     const buffer = Buffer.from(await file.arrayBuffer());
-    await writeFile(path.join(UPLOAD_DIR, storedName), buffer);
+
+    const { error } = await supabaseAdmin.storage
+      .from(FILES_BUCKET)
+      .upload(objectPath, buffer, { contentType: file.type || "application/octet-stream" });
+    if (error) throw new Error(`Kunde inte ladda upp ${file.name}: ${error.message}`);
+
+    const { data: publicUrl } = supabaseAdmin.storage.from(FILES_BUCKET).getPublicUrl(objectPath);
 
     await prisma.fileAttachment.create({
       data: {
         namn: file.name,
         storlek: file.size,
         typ: file.type || "application/octet-stream",
-        url: `/uploads/${storedName}`,
+        url: publicUrl.publicUrl,
         caseId,
         uppladdadAvId: user.id,
       },
@@ -248,15 +248,24 @@ export async function uploadFiles(caseId: string, formData: FormData) {
   revalidatePath(`/arende/${caseId}`);
 }
 
+// Extraherar lagringssökvägen ("<caseId>/<uuid>.<ext>") ur en public-URL, så
+// vi kan ta bort objektet i Storage utan att spara sökvägen som ett eget
+// fält - URL:en innehåller redan all information vi behöver.
+function objectPathFromPublicUrl(url: string) {
+  const marker = `/object/public/${FILES_BUCKET}/`;
+  const i = url.indexOf(marker);
+  return i === -1 ? null : decodeURIComponent(url.slice(i + marker.length));
+}
+
 export async function removeFile(caseId: string, fileId: string) {
   await requireUser();
   const file = await prisma.fileAttachment.findUnique({ where: { id: fileId } });
   if (!file || file.caseId !== caseId) return;
 
-  try {
-    await unlink(path.join(UPLOAD_DIR, path.basename(file.url)));
-  } catch {
-    // already gone from disk - still remove the DB record
+  const objectPath = objectPathFromPublicUrl(file.url);
+  if (objectPath) {
+    const supabaseAdmin = createAdminSupabaseClient();
+    await supabaseAdmin.storage.from(FILES_BUCKET).remove([objectPath]);
   }
   await prisma.fileAttachment.delete({ where: { id: fileId } });
 

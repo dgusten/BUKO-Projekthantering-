@@ -27,10 +27,27 @@ export async function createClient() {
 }
 
 // Bypasses RLS entirely - only for trusted server-side admin operations
-// (the seed script creating auth users). Never expose SUPABASE_SECRET_KEY to
-// the client.
+// (the seed script creating auth users, and file upload/delete in
+// actions.ts). Never expose SUPABASE_SECRET_KEY to the client.
 export function createAdminSupabaseClient() {
   return createAdminClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SECRET_KEY!, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+}
+
+// Ärendebilagor (ritningar/PDF/bilder). Public bucket - same security level
+// as the old public/uploads/ setup (a random-UUID filename is unguessable,
+// but anyone with the exact URL can fetch it without being logged in).
+// Move to a private bucket + signed URLs later if that's not good enough.
+export const FILES_BUCKET = "case-files";
+
+export async function ensureStorageBucket() {
+  const supabaseAdmin = createAdminSupabaseClient();
+  // Check first rather than create-and-swallow-the-error: the exact error
+  // message/code Storage returns for "already exists" isn't part of the
+  // client's public types, so matching against it would be guesswork.
+  const { data: existing } = await supabaseAdmin.storage.getBucket(FILES_BUCKET);
+  if (existing) return;
+  const { error } = await supabaseAdmin.storage.createBucket(FILES_BUCKET, { public: true });
+  if (error) throw error;
 }

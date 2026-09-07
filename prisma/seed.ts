@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { createAdminSupabaseClient } from "../src/lib/supabase/server";
+import { createAdminSupabaseClient, ensureStorageBucket } from "../src/lib/supabase/server";
 
 const prisma = new PrismaClient();
 const supabaseAdmin = createAdminSupabaseClient();
@@ -34,6 +34,9 @@ function daysAgo(n: number) {
 }
 
 async function main() {
+  await ensureStorageBucket();
+  console.log("Supabase Storage-bucket klar.");
+
   await prisma.statusLogEntry.deleteMany();
   await prisma.historyEntry.deleteMany();
   await prisma.comment.deleteMany();
