@@ -59,7 +59,7 @@ export default function Sidebar({ user }: { user: SidebarUser }) {
         </div>
         <form action={logout}>
           <button type="submit" className="switch-user-btn">
-            Byt användare
+            Logga ut
           </button>
         </form>
       </div>

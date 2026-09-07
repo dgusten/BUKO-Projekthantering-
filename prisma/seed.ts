@@ -1,6 +1,33 @@
 import { PrismaClient } from "@prisma/client";
+import { createAdminSupabaseClient } from "../src/lib/supabase/server";
 
 const prisma = new PrismaClient();
+const supabaseAdmin = createAdminSupabaseClient();
+
+// Delat dev-lösenord för alla testanvändare - byt/rotera innan riktiga
+// medarbetare pekas mot samma projekt. Bara till för att kunna logga in och
+// testa flödet lokalt.
+const DEV_PASSWORD = "BukoDev2026!";
+
+// Skapar (eller återanvänder, om den redan finns) ett riktigt Supabase
+// Auth-konto per testanvändare, så inloggningssidan faktiskt går att testa.
+// Kopplingen mot vår egen User-tabell sker via e-postadressen.
+async function ensureAuthUser(email: string) {
+  const { data, error } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password: DEV_PASSWORD,
+    email_confirm: true,
+  });
+  if (!error) return data.user;
+
+  if (error.code === "email_exists") {
+    const { data: list, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+    if (listError) throw listError;
+    const existing = list.users.find((u) => u.email === email);
+    if (existing) return existing;
+  }
+  throw error;
+}
 
 function daysAgo(n: number) {
   return new Date(Date.now() - n * 86400000);
@@ -16,21 +43,20 @@ async function main() {
   await prisma.case.deleteMany();
   await prisma.user.deleteMany();
 
-  const anna = await prisma.user.create({
-    data: { id: "u1", name: "Anna Admin", role: "ADMIN", initials: "AA", email: "anna.admin@buko.se" },
-  });
-  const pelle = await prisma.user.create({
-    data: { id: "u2", name: "Pelle Persson", role: "PL", initials: "PP", email: "pelle.persson@buko.se" },
-  });
-  const petra = await prisma.user.create({
-    data: { id: "u3", name: "Petra Nilsson", role: "PL", initials: "PN", email: "petra.nilsson@buko.se" },
-  });
-  const tomas = await prisma.user.create({
-    data: { id: "u4", name: "Tomas Andersson", role: "TA", initials: "TA", email: "tomas.andersson@buko.se" },
-  });
-  const tina = await prisma.user.create({
-    data: { id: "u5", name: "Tina Karlsson", role: "TA", initials: "TK", email: "tina.karlsson@buko.se" },
-  });
+  const seedUsers = [
+    { id: "u1", name: "Anna Admin", role: "ADMIN" as const, initials: "AA", email: "anna.admin@buko.se" },
+    { id: "u2", name: "Pelle Persson", role: "PL" as const, initials: "PP", email: "pelle.persson@buko.se" },
+    { id: "u3", name: "Petra Nilsson", role: "PL" as const, initials: "PN", email: "petra.nilsson@buko.se" },
+    { id: "u4", name: "Tomas Andersson", role: "TA" as const, initials: "TA", email: "tomas.andersson@buko.se" },
+    { id: "u5", name: "Tina Karlsson", role: "TA" as const, initials: "TK", email: "tina.karlsson@buko.se" },
+  ];
+
+  for (const u of seedUsers) {
+    await ensureAuthUser(u.email);
+  }
+  console.log(`Supabase Auth-konton klara. Dev-lösenord för alla: ${DEV_PASSWORD}`);
+
+  const [anna, pelle, petra, tomas, tina] = await Promise.all(seedUsers.map((u) => prisma.user.create({ data: u })));
 
   const c1001 = await prisma.case.create({
     data: {
