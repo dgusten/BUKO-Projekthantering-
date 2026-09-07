@@ -3,8 +3,8 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { STATUS_META, SEVERITY_META, REGION_META, formatDate, formatBytes } from "@/lib/meta";
-import { addComment, assignTA, transitionStatus, saveTillstand, uploadFiles, removeFile } from "@/app/actions";
-import { tillstandStatus, mailtoReminder } from "@/lib/tillstand";
+import { addComment, assignTA, transitionStatus, saveTillstand, uploadFiles, removeFile, sendTillstandReminder } from "@/app/actions";
+import { tillstandStatus } from "@/lib/tillstand";
 import SketchMap from "@/components/SketchMap";
 
 export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
@@ -348,22 +348,11 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
                           <div className="kv-value">{c.tillstand.kundKontaktEmail || "–"}</div>
                         </div>
                       </div>
-                      <a
-                        className="btn btn-sm btn-block"
-                        style={{ marginBottom: 14 }}
-                        href={mailtoReminder({
-                          caseId: c.id,
-                          titel: c.titel,
-                          adress: c.adress,
-                          kund: c.kund,
-                          slutdatumLabel: formatDate(c.tillstand.slutdatum),
-                          plEmail: c.skapadAv.email,
-                          kundKontaktNamn: c.tillstand.kundKontaktNamn,
-                          kundKontaktEmail: c.tillstand.kundKontaktEmail,
-                        })}
-                      >
-                        ✉️ Skicka påminnelse (PL + kund)
-                      </a>
+                      <form action={sendTillstandReminder.bind(null, c.id)} style={{ marginBottom: 14 }}>
+                        <button type="submit" className="btn btn-sm btn-block">
+                          ✉️ Skicka påminnelse (PL + kund)
+                        </button>
+                      </form>
                     </>
                   ) : (
                     <p style={{ fontSize: 12.5, color: "var(--ink-soft)", margin: "0 0 12px" }}>

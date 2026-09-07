@@ -7,6 +7,10 @@ import type { Region, Severity, CaseStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { createClient, createAdminSupabaseClient, FILES_BUCKET } from "@/lib/supabase/server";
+import { sendMail, escapeHtml } from "@/lib/resend";
+import { tillstandStatus } from "@/lib/tillstand";
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
@@ -95,12 +99,36 @@ export async function addComment(caseId: string, formData: FormData) {
   const text = String(formData.get("text") || "").trim();
   if (!text) return;
 
+  const kase = await prisma.case.findUnique({
+    where: { id: caseId },
+    include: { skapadAv: true, tilldeladTA: true },
+  });
+  if (!kase) return;
+
   await prisma.comment.create({
     data: { caseId, userId: user.id, text },
   });
   await prisma.case.update({ where: { id: caseId }, data: { uppdaterad: new Date() } });
 
   revalidatePath(`/arende/${caseId}`);
+
+  const recipients = [kase.skapadAv, kase.tilldeladTA].filter(
+    (u): u is NonNullable<typeof u> => !!u && u.id !== user.id && !!u.email
+  );
+  if (recipients.length) {
+    try {
+      await sendMail(
+        recipients.map((r) => r.email!),
+        `Ny kommentar på ${caseId} – ${kase.titel}`,
+        `<p><strong>${escapeHtml(user.name)}</strong> skrev en kommentar på ärende ` +
+          `<strong>${caseId} – ${escapeHtml(kase.titel)}</strong>:</p>` +
+          `<p style="white-space:pre-wrap">${escapeHtml(text)}</p>` +
+          `<p><a href="${APP_URL}/arende/${caseId}">Öppna ärendet</a></p>`
+      );
+    } catch (e) {
+      console.error("Kunde inte skicka kommentarsmejl:", e);
+    }
+  }
 }
 
 export async function assignTA(caseId: string, formData: FormData) {
@@ -198,6 +226,45 @@ export async function saveTillstand(caseId: string, formData: FormData) {
 
   revalidatePath(`/arende/${caseId}`);
   revalidatePath("/tillstand");
+}
+
+export async function sendTillstandReminder(caseId: string) {
+  const user = await requireUser();
+
+  const kase = await prisma.case.findUnique({
+    where: { id: caseId },
+    include: { skapadAv: true, tillstand: true },
+  });
+  if (!kase || !kase.tillstand) return;
+
+  const t = kase.tillstand;
+  const slutdatumLabel = new Date(t.slutdatum).toLocaleDateString("sv-SE");
+  const status = tillstandStatus(t);
+
+  const recipients = [kase.skapadAv.email, t.kundKontaktEmail].filter((e): e is string => !!e);
+  if (!recipients.length) throw new Error("Ingen mottagare har en registrerad e-postadress.");
+
+  await sendMail(
+    recipients,
+    `Påminnelse: Tillstånd för ${caseId} – ${kase.titel} löper ut ${slutdatumLabel}`,
+    `<p>Detta är en påminnelse om att tillståndet för ärende <strong>${caseId} – ${escapeHtml(kase.titel)}</strong> ` +
+      `på ${escapeHtml(kase.adress)} löper ut <strong>${slutdatumLabel}</strong> (${status.daysLeft} dagar kvar).</p>` +
+      `<p>Kund: ${escapeHtml(kase.kund)}<br/>Kontaktperson hos kund: ${escapeHtml(t.kundKontaktNamn || "-")}</p>` +
+      `<p>Se över om förlängning eller vidare åtgärd behövs.</p>` +
+      `<p><a href="${APP_URL}/arende/${caseId}">Öppna ärendet</a></p>`
+  );
+
+  await prisma.case.update({
+    where: { id: caseId },
+    data: {
+      historyEntries: {
+        create: { text: `Påminnelse om tillstånd skickad till ${recipients.join(", ")}`, userId: user.id },
+      },
+    },
+  });
+
+  revalidatePath("/tillstand");
+  revalidatePath(`/arende/${caseId}`);
 }
 
 export async function uploadFiles(caseId: string, formData: FormData) {

@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { formatDate } from "@/lib/meta";
-import { tillstandStatus, mailtoReminder } from "@/lib/tillstand";
+import { tillstandStatus } from "@/lib/tillstand";
 import { caseMatchesQuery } from "@/lib/caseSearch";
 import SearchAndSort from "@/components/SearchAndSort";
+import { sendTillstandReminder } from "@/app/actions";
 
 export default async function TillstandPage(props: PageProps<"/tillstand">) {
   const searchParams = await props.searchParams;
@@ -89,16 +90,6 @@ export default async function TillstandPage(props: PageProps<"/tillstand">) {
                     {sorted.map((c) => {
                       const t = c.tillstand!;
                       const s = tillstandStatus(t);
-                      const href = mailtoReminder({
-                        caseId: c.id,
-                        titel: c.titel,
-                        adress: c.adress,
-                        kund: c.kund,
-                        slutdatumLabel: formatDate(t.slutdatum),
-                        plEmail: c.skapadAv.email,
-                        kundKontaktNamn: t.kundKontaktNamn,
-                        kundKontaktEmail: t.kundKontaktEmail,
-                      });
                       return (
                         <tr key={c.id}>
                           <td>
@@ -119,9 +110,11 @@ export default async function TillstandPage(props: PageProps<"/tillstand">) {
                           </td>
                           <td>{t.kundKontaktNamn || "–"}</td>
                           <td style={{ textAlign: "right" }}>
-                            <a className="btn btn-sm" href={href}>
-                              ✉️ Skicka påminnelse
-                            </a>
+                            <form action={sendTillstandReminder.bind(null, c.id)}>
+                              <button type="submit" className="btn btn-sm">
+                                ✉️ Skicka påminnelse
+                              </button>
+                            </form>
                           </td>
                         </tr>
                       );
@@ -133,8 +126,8 @@ export default async function TillstandPage(props: PageProps<"/tillstand">) {
           )}
 
           <div className="hint" style={{ marginTop: 14 }}>
-            &quot;Skicka påminnelse&quot; öppnar ett utkast i din e-postklient till projektledaren och kundens
-            kontaktperson – automatiska utskick kräver Microsoft Graph-integrationen.
+            &quot;Skicka påminnelse&quot; skickar direkt ett e-postmeddelande till projektledaren och kundens
+            kontaktperson.
           </div>
         </div>
       </div>
