@@ -43,7 +43,11 @@ export async function createUser(formData: FormData) {
   if (admin.role !== "ADMIN") throw new Error("Endast admin kan skapa användare.");
 
   const name = String(formData.get("name") || "").trim();
-  const email = String(formData.get("email") || "").trim();
+  // Supabase Auth normaliserar e-post till gemener internt (JWT-claimen vid
+  // inloggning kommer alltid vara lowercase) - matchar vi inte det här slutar
+  // session.ts:getCurrentUser() hitta rätt User-rad för konton skapade med
+  // versaler i e-postadressen.
+  const email = String(formData.get("email") || "").trim().toLowerCase();
   const role = String(formData.get("role") || "");
   const password = String(formData.get("password") || "");
 
