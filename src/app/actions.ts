@@ -223,7 +223,14 @@ export async function assignTA(caseId: string, formData: FormData) {
   ]);
   if (!ta || !current) return;
   const isOwnerPL = user.id === current.skapadAvId || user.role === "ADMIN";
-  if (!isOwnerPL) throw new Error("Du kan bara tilldela ärenden du äger.");
+  const isUnclaimed = !current.tilldeladTAId;
+  const canTaAct = user.role === "TA" && (isUnclaimed || user.id === current.tilldeladTAId);
+  if (!isOwnerPL && !canTaAct) {
+    throw new Error("Du kan bara tilldela ärenden du äger, eller ta över ärenden som inte är tilldelade eller redan är dina.");
+  }
+  if (current.status !== "NY" && current.status !== "HOS_TA") {
+    throw new Error("Kan inte tilldela TA-plansritare i det här skedet av ärendet.");
+  }
 
   const now = new Date();
   await prisma.case.update({

@@ -274,7 +274,7 @@ button { font-family: inherit; color: inherit; }
 .page-header p { margin: 0; color: var(--ink-soft); font-size: 13.5px; }
 
 .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
-.stat-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.stat-card { display: block; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; color: inherit; text-decoration: none; }
 .stat-card .num { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
 .stat-card .label { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
 

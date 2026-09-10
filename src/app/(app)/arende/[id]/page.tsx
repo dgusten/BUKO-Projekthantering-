@@ -39,7 +39,11 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
     karta = null;
   }
 
-  const taUsers = c.status === "NY" ? await prisma.user.findMany({ where: { role: "TA" }, orderBy: { name: "asc" } }) : [];
+  const isUnclaimedTA = !c.tilldeladTAId;
+  const canAssignTA =
+    (c.status === "NY" || c.status === "HOS_TA") &&
+    (isOwnerPL || (user.role === "TA" && (isUnclaimedTA || c.tilldeladTAId === user.id)));
+  const taUsers = canAssignTA ? await prisma.user.findMany({ where: { role: "TA" }, orderBy: { name: "asc" } }) : [];
 
   const addCommentForCase = addComment.bind(null, c.id);
   const assignTAForCase = assignTA.bind(null, c.id);
@@ -146,8 +150,8 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
                           {formatBytes(f.storlek)} · uppladdad av {f.uppladdadAv.name}
                         </div>
                       </span>
-                      <a href={f.url} download={f.namn} className="btn btn-sm btn-ghost" title="Ladda ner">
-                        ⬇️
+                      <a href={f.url} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-ghost" title="Öppna i nytt fönster">
+                        ↗️
                       </a>
                       <form action={removeFile.bind(null, c.id, f.id)}>
                         <button type="submit" className="btn btn-sm btn-ghost" title="Ta bort">
@@ -221,25 +225,38 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
               <div className="card card-pad action-panel" style={{ marginBottom: 16 }}>
                 <div className="section-title">Åtgärder</div>
 
-                {c.status === "NY" && (
-                  <form action={assignTAForCase}>
-                    <div className="form-group">
-                      <label>Tilldela TA-plansritare</label>
-                      <select name="taId" defaultValue="">
-                        <option value="" disabled>
-                          Välj...
-                        </option>
-                        {taUsers.map((x) => (
-                          <option key={x.id} value={x.id}>
-                            {x.name}
+                {canAssignTA && (
+                  <>
+                    {user.role === "TA" && isUnclaimedTA && (
+                      <form action={assignTAForCase} style={{ marginBottom: 10 }}>
+                        <input type="hidden" name="taId" value={user.id} />
+                        <button type="submit" className="btn btn-primary btn-block">
+                          🙋 Ta jobbet själv
+                        </button>
+                      </form>
+                    )}
+                    <form action={assignTAForCase}>
+                      <div className="form-group">
+                        <label>{c.tilldeladTAId ? "Byt TA-plansritare" : "Tilldela TA-plansritare"}</label>
+                        <select name="taId" defaultValue="">
+                          <option value="" disabled>
+                            Välj...
                           </option>
-                        ))}
-                      </select>
-                    </div>
-                    <button type="submit" className="btn btn-primary btn-block">
-                      Tilldela
-                    </button>
-                  </form>
+                          {taUsers.map((x) => (
+                            <option key={x.id} value={x.id}>
+                              {x.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        type="submit"
+                        className={`btn btn-block ${user.role === "TA" && isUnclaimedTA ? "" : "btn-primary"}`}
+                      >
+                        {c.tilldeladTAId ? "Byt TA-plansritare" : "Tilldela"}
+                      </button>
+                    </form>
+                  </>
                 )}
 
                 {c.status === "HOS_TA" && isAssignedTA && (

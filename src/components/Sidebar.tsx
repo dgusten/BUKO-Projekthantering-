@@ -15,6 +15,7 @@ type SidebarUser = {
 const NAV_ITEMS = [
   { href: "/", label: "Alla ärenden", icon: "\u{1F4C1}" },
   { href: "/pagaende", label: "Pågående ärenden", icon: "\u{1F5C2}\u{FE0F}" },
+  { href: "/avslutade", label: "Avslutade ärenden", icon: "✅" },
   { href: "/tillstand", label: "Tillstånd", icon: "\u{1F4DC}" },
   { href: "/statistik", label: "Statistik", icon: "\u{1F4CA}" },
 ];
