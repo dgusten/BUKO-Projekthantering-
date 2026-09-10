@@ -13,6 +13,7 @@ import {
   sendTillstandReminder,
   addTimeEntry,
   deleteTimeEntry,
+  revertStatus,
 } from "@/app/actions";
 import { tillstandStatus } from "@/lib/tillstand";
 import SketchMap from "@/components/SketchMap";
@@ -29,7 +30,7 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
       comments: { include: { user: true }, orderBy: { datum: "asc" } },
       historyEntries: { include: { user: true }, orderBy: { datum: "desc" } },
       linksFrom: { include: { linked: true } },
-      statusLog: true,
+      statusLog: { orderBy: { datum: "asc" } },
       tillstand: true,
       files: { include: { uppladdadAv: true }, orderBy: { datum: "desc" } },
       timeEntries: { include: { user: true }, orderBy: { datum: "desc" } },
@@ -71,6 +72,20 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
   const goAvslag = transitionStatus.bind(null, c.id, "TILLSTAND_AVSLAG", "Tillstånd avslaget");
   const goTillbakaEfterAvslag = transitionStatus.bind(null, c.id, "HOS_TA", "Skickat tillbaka till TA-plansritare efter avslag");
   const goAvslutat = transitionStatus.bind(null, c.id, "AVSLUTAT", "Ärende avslutat");
+  const revertStatusForCase = revertStatus.bind(null, c.id);
+
+  const previousStatus = c.statusLog.length > 1 ? c.statusLog[c.statusLog.length - 2].status : null;
+  const canRevert = isOwnerPL && previousStatus !== null;
+  const canAdminForceClose = user.role === "ADMIN" && !["TILLSTAND_AVSLAG", "TILLSTAND_BEVILJAT", "AVSLUTAT"].includes(c.status);
+  const hasAnyAction =
+    canAssignTA ||
+    (c.status === "HOS_TA" && isAssignedTA) ||
+    (c.status === "TA_KLAR" && isOwnerPL) ||
+    (c.status === "TILLSTAND_SOKT" && isOwnerPL) ||
+    (c.status === "TILLSTAND_AVSLAG" && isOwnerPL) ||
+    (c.status === "TILLSTAND_BEVILJAT" && isOwnerPL) ||
+    canAdminForceClose ||
+    canRevert;
 
   return (
     <>
@@ -396,14 +411,25 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
                   </form>
                 )}
 
-                {!(
-                  c.status === "NY" ||
-                  (c.status === "HOS_TA" && isAssignedTA) ||
-                  (c.status === "TA_KLAR" && isOwnerPL) ||
-                  (c.status === "TILLSTAND_SOKT" && isOwnerPL) ||
-                  (c.status === "TILLSTAND_AVSLAG" && isOwnerPL) ||
-                  (c.status === "TILLSTAND_BEVILJAT" && isOwnerPL)
-                ) && <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>Inga åtgärder tillgängliga för dig i detta steg.</p>}
+                {canAdminForceClose && (
+                  <form action={goAvslutat}>
+                    <button type="submit" className="btn btn-block">
+                      Avsluta ärende (admin)
+                    </button>
+                  </form>
+                )}
+
+                {canRevert && (
+                  <form action={revertStatusForCase} style={{ marginTop: 10 }}>
+                    <button type="submit" className="btn btn-sm btn-block btn-ghost">
+                      ↩️ Backa till &quot;{STATUS_META[previousStatus!].label}&quot;
+                    </button>
+                  </form>
+                )}
+
+                {!hasAnyAction && (
+                  <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>Inga åtgärder tillgängliga för dig i detta steg.</p>
+                )}
               </div>
 
               {reachedTaKlar && (

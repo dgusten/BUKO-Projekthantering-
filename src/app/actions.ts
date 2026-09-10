@@ -9,6 +9,7 @@ import { requireUser } from "@/lib/session";
 import { createClient, createAdminSupabaseClient, FILES_BUCKET } from "@/lib/supabase/server";
 import { sendMail, escapeHtml } from "@/lib/resend";
 import { tillstandStatus } from "@/lib/tillstand";
+import { STATUS_META } from "@/lib/meta";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
@@ -265,6 +266,7 @@ export async function transitionStatus(caseId: string, newStatus: CaseStatus, hi
   const isAssignedTA = user.id === current.tilldeladTAId || user.role === "ADMIN";
 
   const allowed =
+    user.role === "ADMIN" ||
     (current.status === "HOS_TA" && isAssignedTA) ||
     (["TA_KLAR", "TILLSTAND_SOKT", "TILLSTAND_AVSLAG", "TILLSTAND_BEVILJAT"].includes(current.status) && isOwnerPL);
   if (!allowed) throw new Error("Du har inte behörighet att göra den här ändringen.");
@@ -282,6 +284,34 @@ export async function transitionStatus(caseId: string, newStatus: CaseStatus, hi
       ...(newStatus === "TILLSTAND_BEVILJAT" ? { fakturerat: true } : {}),
       historyEntries: { create: { text: historyText, userId: user.id, datum: now } },
       statusLog: { create: { status: newStatus, datum: now } },
+    },
+  });
+
+  revalidatePath(`/arende/${caseId}`);
+}
+
+export async function revertStatus(caseId: string) {
+  const user = await requireUser();
+  const current = await prisma.case.findUnique({
+    where: { id: caseId },
+    include: { statusLog: { orderBy: { datum: "asc" } } },
+  });
+  if (!current) return;
+  const isOwnerPL = user.id === current.skapadAvId || user.role === "ADMIN";
+  if (!isOwnerPL) throw new Error("Du har inte behörighet att backa det här ärendet.");
+
+  const previous = current.statusLog[current.statusLog.length - 2];
+  if (!previous) throw new Error("Det finns inget tidigare steg att backa till.");
+
+  const now = new Date();
+  await prisma.case.update({
+    where: { id: caseId },
+    data: {
+      status: previous.status,
+      historyEntries: {
+        create: { text: `Status backad till "${STATUS_META[previous.status].label}"`, userId: user.id, datum: now },
+      },
+      statusLog: { create: { status: previous.status, datum: now } },
     },
   });
 
