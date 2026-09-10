@@ -5,9 +5,19 @@ import { REGION_META } from "@/lib/meta";
 import { createCase } from "@/app/actions";
 import SketchMap from "@/components/SketchMap";
 
-export default async function SkapaArendePage() {
+export default async function SkapaArendePage(props: PageProps<"/skapa">) {
   const user = await requireUser();
   if (user.role !== "PL" && user.role !== "ADMIN") redirect("/");
+
+  const searchParams = await props.searchParams;
+  const kopieraFranId = typeof searchParams.kopieraFran === "string" ? searchParams.kopieraFran : null;
+  const kopieraFran = kopieraFranId ? await prisma.case.findUnique({ where: { id: kopieraFranId } }) : null;
+  let kopieradKarta = null;
+  try {
+    kopieradKarta = kopieraFran?.karta ? JSON.parse(kopieraFran.karta) : null;
+  } catch {
+    kopieradKarta = null;
+  }
 
   const taUsers = await prisma.user.findMany({ where: { role: "TA" }, orderBy: { name: "asc" } });
   const activeCounts = await prisma.case.groupBy({
@@ -32,33 +42,52 @@ export default async function SkapaArendePage() {
             </div>
           </div>
 
+          {kopieraFran && (
+            <div className="hint" style={{ marginBottom: 14 }}>
+              Kopierar från <strong>{kopieraFran.id} – {kopieraFran.titel}</strong>. Det nya ärendet kommer
+              automatiskt kopplas ihop med det som en etapp/fas av samma projekt.
+            </div>
+          )}
+
           <div className="card card-pad" style={{ maxWidth: 720 }}>
             <form action={createCase}>
+              {kopieraFran && <input type="hidden" name="kopieradFran" value={kopieraFran.id} />}
               <div className="form-row">
                 <div className="form-group">
                   <label>Kund</label>
-                  <input type="text" name="kund" placeholder="T.ex. Norrköpings kommun" required />
+                  <input type="text" name="kund" placeholder="T.ex. Norrköpings kommun" defaultValue={kopieraFran?.kund} required />
                 </div>
                 <div className="form-group">
                   <label>Titel</label>
-                  <input type="text" name="titel" placeholder="T.ex. Ledningsarbete Storgatan" required />
+                  <input
+                    type="text"
+                    name="titel"
+                    placeholder="T.ex. Ledningsarbete Storgatan"
+                    defaultValue={kopieraFran?.titel}
+                    required
+                  />
                 </div>
               </div>
 
               <div className="form-row">
                 <div className="form-group">
                   <label>Jobbnummer</label>
-                  <input type="text" name="jobbnummer" placeholder="T.ex. J-2026-0142" />
+                  <input
+                    type="text"
+                    name="jobbnummer"
+                    placeholder="T.ex. J-2026-0142"
+                    defaultValue={kopieraFran?.jobbnummer ?? undefined}
+                  />
                 </div>
                 <div className="form-group">
                   <label>Adress / plats</label>
-                  <input type="text" name="adress" placeholder="Gata, ort" required />
+                  <input type="text" name="adress" placeholder="Gata, ort" defaultValue={kopieraFran?.adress} required />
                 </div>
               </div>
 
               <div className="form-group">
                 <label>Region</label>
-                <select name="region" required defaultValue="">
+                <select name="region" required defaultValue={kopieraFran?.region ?? ""}>
                   <option value="" disabled>
                     Välj region...
                   </option>
@@ -72,7 +101,12 @@ export default async function SkapaArendePage() {
 
               <div className="form-group">
                 <label>Beskrivning</label>
-                <textarea name="beskrivning" placeholder="Beskriv arbetet och vad TA-planen behöver täcka..." required />
+                <textarea
+                  name="beskrivning"
+                  placeholder="Beskriv arbetet och vad TA-planen behöver täcka..."
+                  defaultValue={kopieraFran?.beskrivning}
+                  required
+                />
               </div>
 
               <div className="form-row">
@@ -82,7 +116,7 @@ export default async function SkapaArendePage() {
                 </div>
                 <div className="form-group">
                   <label>Svårighetsgrad</label>
-                  <select name="svarighetsgrad" defaultValue="MEDEL">
+                  <select name="svarighetsgrad" defaultValue={kopieraFran?.svarighetsgrad ?? "MEDEL"}>
                     <option value="LATT">Lätt</option>
                     <option value="MEDEL">Medel</option>
                     <option value="SVAR">Svår</option>
@@ -105,7 +139,7 @@ export default async function SkapaArendePage() {
 
               <div className="form-group">
                 <label>Arbetsområde – typskiss i kartvy</label>
-                <SketchMap name="karta" editable />
+                <SketchMap name="karta" editable initialValue={kopieradKarta} />
                 <div className="hint">
                   Klicka på markörsymbolen för att markera adressen, rita linjer/polygoner/rektanglar/cirklar för att
                   skissa arbetsområdet, välj färg för att visa olika saker (t.ex. röd = avstängning, blå = gångväg),

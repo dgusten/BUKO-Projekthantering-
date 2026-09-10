@@ -131,10 +131,13 @@ export async function createCase(formData: FormData) {
   const deadlineRaw = String(formData.get("deadline") || "");
   const tilldeladTAId = String(formData.get("tilldeladTA") || "") || null;
   const kartaRaw = String(formData.get("karta") || "");
+  const kopieradFranId = String(formData.get("kopieradFran") || "") || null;
 
   if (!titel || !kund || !adress || !beskrivning) {
     throw new Error("Fyll i kund, titel, adress och beskrivning.");
   }
+
+  const kopieradFran = kopieradFranId ? await prisma.case.findUnique({ where: { id: kopieradFranId } }) : null;
 
   const id = await nextCaseNumber();
   const status: CaseStatus = tilldeladTAId ? "HOS_TA" : "NY";
@@ -170,6 +173,13 @@ export async function createCase(formData: FormData) {
       },
     },
   });
+
+  if (kopieradFran) {
+    await prisma.$transaction([
+      prisma.caseLink.create({ data: { caseId: id, linkedId: kopieradFran.id } }),
+      prisma.caseLink.create({ data: { caseId: kopieradFran.id, linkedId: id } }),
+    ]);
+  }
 
   revalidatePath("/");
   redirect(`/arende/${id}`);
@@ -246,7 +256,7 @@ export async function assignTA(caseId: string, formData: FormData) {
   revalidatePath(`/arende/${caseId}`);
 }
 
-export async function transitionStatus(caseId: string, newStatus: CaseStatus, historyText: string) {
+export async function transitionStatus(caseId: string, newStatus: CaseStatus, historyText: string, formData: FormData) {
   const user = await requireUser();
 
   const current = await prisma.case.findUnique({ where: { id: caseId } });
@@ -259,12 +269,17 @@ export async function transitionStatus(caseId: string, newStatus: CaseStatus, hi
     (["TA_KLAR", "TILLSTAND_SOKT", "TILLSTAND_AVSLAG", "TILLSTAND_BEVILJAT"].includes(current.status) && isOwnerPL);
   if (!allowed) throw new Error("Du har inte behörighet att göra den här ändringen.");
 
+  if (newStatus === "TILLSTAND_BEVILJAT" && formData.get("fakturerat") !== "on") {
+    throw new Error("Bekräfta att kunden är fakturerad innan tillståndet markeras som beviljat.");
+  }
+
   const now = new Date();
 
   await prisma.case.update({
     where: { id: caseId },
     data: {
       status: newStatus,
+      ...(newStatus === "TILLSTAND_BEVILJAT" ? { fakturerat: true } : {}),
       historyEntries: { create: { text: historyText, userId: user.id, datum: now } },
       statusLog: { create: { status: newStatus, datum: now } },
     },
@@ -424,5 +439,44 @@ export async function removeFile(caseId: string, fileId: string) {
   }
   await prisma.fileAttachment.delete({ where: { id: fileId } });
 
+  revalidatePath(`/arende/${caseId}`);
+}
+
+export async function addTimeEntry(caseId: string, formData: FormData) {
+  const user = await requireUser();
+  const current = await prisma.case.findUnique({ where: { id: caseId } });
+  if (!current) return;
+  if (user.role !== "ADMIN" && user.id !== current.tilldeladTAId) {
+    throw new Error("Bara den tilldelade TA-plansritaren kan registrera timmar.");
+  }
+
+  const timmar = parseFloat(String(formData.get("timmar") || "").replace(",", "."));
+  const kommentar = String(formData.get("kommentar") || "").trim();
+  if (!Number.isFinite(timmar) || timmar <= 0) throw new Error("Ange ett giltigt antal timmar.");
+
+  await prisma.timeEntry.create({
+    data: { timmar, kommentar: kommentar || null, caseId, userId: user.id },
+  });
+  await prisma.case.update({
+    where: { id: caseId },
+    data: {
+      uppdaterad: new Date(),
+      historyEntries: {
+        create: { text: `Registrerade ${timmar} timmar${kommentar ? ": " + kommentar : ""}`, userId: user.id },
+      },
+    },
+  });
+
+  revalidatePath(`/arende/${caseId}`);
+}
+
+export async function deleteTimeEntry(caseId: string, entryId: string) {
+  const user = await requireUser();
+  const entry = await prisma.timeEntry.findUnique({ where: { id: entryId } });
+  if (!entry || entry.caseId !== caseId) return;
+  if (user.role !== "ADMIN" && entry.userId !== user.id) {
+    throw new Error("Du kan bara ta bort dina egna tidsregistreringar.");
+  }
+  await prisma.timeEntry.delete({ where: { id: entryId } });
   revalidatePath(`/arende/${caseId}`);
 }

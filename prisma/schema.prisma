@@ -58,6 +58,7 @@ model User {
   comments       Comment[]
   historyEntries HistoryEntry[]
   uploadedFiles  FileAttachment[]
+  timeEntries    TimeEntry[]
 
   createdAt DateTime @default(now())
 }
@@ -76,6 +77,7 @@ model Case {
   deadline       DateTime?
   status         CaseStatus @default(NY)
   karta          String? // GeoJSON, sparas som text
+  fakturerat     Boolean    @default(false)
 
   skapadAv   User   @relation("CreatedBy", fields: [skapadAvId], references: [id])
   skapadAvId String
@@ -91,6 +93,7 @@ model Case {
   historyEntries HistoryEntry[]
   statusLog      StatusLogEntry[]
   tillstand      Tillstand?
+  timeEntries    TimeEntry[]
 
   // Koppling mellan ärenden (etapper/faser av samma projekt).
   linksFrom CaseLink[] @relation("LinkFrom")
@@ -171,6 +174,23 @@ model StatusLogEntry {
 
   case   Case   @relation(fields: [caseId], references: [id], onDelete: Cascade)
   caseId String
+
+  @@index([caseId])
+}
+
+// Timregistrering - TA-plansritaren kan logga timmar flera gånger på samma
+// ärende (t.ex. en rad per revideringsrunda när PL skickar tillbaka jobbet).
+model TimeEntry {
+  id        String   @id @default(cuid())
+  timmar    Float
+  kommentar String?
+  datum     DateTime @default(now())
+
+  case   Case   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  caseId String
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
 
   @@index([caseId])
 }

@@ -3,7 +3,17 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { STATUS_META, SEVERITY_META, REGION_META, formatDate, formatBytes } from "@/lib/meta";
-import { addComment, assignTA, transitionStatus, saveTillstand, uploadFiles, removeFile, sendTillstandReminder } from "@/app/actions";
+import {
+  addComment,
+  assignTA,
+  transitionStatus,
+  saveTillstand,
+  uploadFiles,
+  removeFile,
+  sendTillstandReminder,
+  addTimeEntry,
+  deleteTimeEntry,
+} from "@/app/actions";
 import { tillstandStatus } from "@/lib/tillstand";
 import SketchMap from "@/components/SketchMap";
 
@@ -22,6 +32,7 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
       statusLog: true,
       tillstand: true,
       files: { include: { uppladdadAv: true }, orderBy: { datum: "desc" } },
+      timeEntries: { include: { user: true }, orderBy: { datum: "desc" } },
     },
   });
 
@@ -44,11 +55,15 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
     (c.status === "NY" || c.status === "HOS_TA") &&
     (isOwnerPL || (user.role === "TA" && (isUnclaimedTA || c.tilldeladTAId === user.id)));
   const taUsers = canAssignTA ? await prisma.user.findMany({ where: { role: "TA" }, orderBy: { name: "asc" } }) : [];
+  const canLogTime = user.role === "ADMIN" || user.id === c.tilldeladTAId;
+  const totalTimmar = c.timeEntries.reduce((sum, t) => sum + t.timmar, 0);
 
   const addCommentForCase = addComment.bind(null, c.id);
   const assignTAForCase = assignTA.bind(null, c.id);
   const saveTillstandForCase = saveTillstand.bind(null, c.id);
   const uploadFilesForCase = uploadFiles.bind(null, c.id);
+  const addTimeEntryForCase = addTimeEntry.bind(null, c.id);
+  const deleteTimeEntryForCase = deleteTimeEntry.bind(null, c.id);
   const goTaKlar = transitionStatus.bind(null, c.id, "TA_KLAR", "TA-plan klar, skickat till projektledare");
   const goTillstandSokt = transitionStatus.bind(null, c.id, "TILLSTAND_SOKT", "Ansökan om tillstånd inskickad");
   const goJustering = transitionStatus.bind(null, c.id, "HOS_TA", "Skickat tillbaka till TA-plansritare för justering");
@@ -82,6 +97,11 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
                 {severity.label}
               </span>
             </div>
+            {isOwnerPL && (
+              <Link href={`/skapa?kopieraFran=${c.id}`} className="btn btn-sm">
+                📋 Kopiera ärende (ny etapp)
+              </Link>
+            )}
           </div>
 
           <div className="detail-grid">
@@ -121,6 +141,10 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
                     <div className="kv-label">Senast uppdaterad</div>
                     <div className="kv-value">{formatDate(c.uppdaterad)}</div>
                   </div>
+                  <div>
+                    <div className="kv-label">Fakturerat</div>
+                    <div className="kv-value">{c.fakturerat ? "Ja" : "Nej"}</div>
+                  </div>
                 </div>
                 <div style={{ marginTop: 16 }}>
                   <div className="kv-label" style={{ marginBottom: 6 }}>
@@ -128,6 +152,54 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
                   </div>
                   <div className="desc-block">{c.beskrivning}</div>
                 </div>
+              </div>
+
+              <div className="card card-pad" style={{ marginBottom: 16 }}>
+                <div className="section-title">Tidsregistrering</div>
+                {c.timeEntries.length === 0 ? (
+                  <div style={{ fontSize: 12.5, color: "var(--ink-faint)", marginBottom: 14 }}>
+                    Inga timmar registrerade än.
+                  </div>
+                ) : (
+                  <div className="file-list" style={{ marginBottom: 14 }}>
+                    {c.timeEntries.map((t) => (
+                      <div className="file-item" key={t.id}>
+                        <span className="file-icon">{t.timmar}h</span>
+                        <span className="file-meta">
+                          <div className="file-name">
+                            {t.user.name} · {formatDate(t.datum)}
+                          </div>
+                          {t.kommentar && <div className="file-sub">{t.kommentar}</div>}
+                        </span>
+                        {(user.role === "ADMIN" || user.id === t.userId) && (
+                          <form action={deleteTimeEntryForCase.bind(null, t.id)}>
+                            <button type="submit" className="btn btn-sm btn-ghost" title="Ta bort">
+                              ✕
+                            </button>
+                          </form>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: canLogTime ? 14 : 0 }}>
+                  Totalt: {totalTimmar} timmar
+                </div>
+                {canLogTime && (
+                  <form action={addTimeEntryForCase} className="form-row" style={{ alignItems: "end" }}>
+                    <div className="form-group" style={{ marginBottom: 0, maxWidth: 110 }}>
+                      <label>Timmar</label>
+                      <input type="text" inputMode="decimal" name="timmar" placeholder="t.ex. 2,5" required />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0, flex: 1 }}>
+                      <label>Kommentar (valfritt)</label>
+                      <input type="text" name="kommentar" placeholder="Vad gjordes?" />
+                    </div>
+                    <button type="submit" className="btn btn-primary" style={{ marginBottom: 0 }}>
+                      Registrera
+                    </button>
+                  </form>
+                )}
               </div>
 
               <div className="card card-pad" style={{ marginBottom: 16 }}>
@@ -284,7 +356,11 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
 
                 {c.status === "TILLSTAND_SOKT" && isOwnerPL && (
                   <>
-                    <form action={goBeviljat}>
+                    <form action={goBeviljat} style={{ marginBottom: 10 }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, marginBottom: 10 }}>
+                        <input type="checkbox" name="fakturerat" required />
+                        Kunden är fakturerad
+                      </label>
                       <button type="submit" className="btn btn-primary btn-block">
                         Markera tillstånd beviljat
                       </button>
