@@ -266,7 +266,7 @@ export default function SketchMap({
                 <input
                   type="text"
                   placeholder="Etikettext"
-                  maxLength={40}
+                  maxLength={120}
                   autoFocus
                   value={labelText}
                   onChange={(e) => setLabelText(e.target.value)}
