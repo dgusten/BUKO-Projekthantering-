@@ -300,44 +300,28 @@ export async function revertStatus(caseId: string) {
   const isOwnerPL = user.id === current.skapadAvId || user.role === "ADMIN";
   if (!isOwnerPL) throw new Error("Du har inte behörighet att backa det här ärendet.");
 
+  if (current.statusLog.length < 2) throw new Error("Det finns inget tidigare steg att backa till.");
+
+  // "Poppar" den senaste statusLog-raden istället för att lägga till en ny
+  // som pekar tillbaka - annars alternerar upprepade klick mellan de två
+  // senaste statusarna istället för att gå vidare bakåt genom den riktiga
+  // historiken (t.ex. Avslutat -> Hos TA -> Avslutat -> Hos TA i all evighet).
+  const last = current.statusLog[current.statusLog.length - 1];
   const previous = current.statusLog[current.statusLog.length - 2];
-  if (!previous) throw new Error("Det finns inget tidigare steg att backa till.");
 
   const now = new Date();
-  await prisma.case.update({
-    where: { id: caseId },
-    data: {
-      status: previous.status,
-      historyEntries: {
-        create: { text: `Status backad till "${STATUS_META[previous.status].label}"`, userId: user.id, datum: now },
+  await prisma.$transaction([
+    prisma.statusLogEntry.delete({ where: { id: last.id } }),
+    prisma.case.update({
+      where: { id: caseId },
+      data: {
+        status: previous.status,
+        historyEntries: {
+          create: { text: `Status backad till "${STATUS_META[previous.status].label}"`, userId: user.id, datum: now },
+        },
       },
-      statusLog: { create: { status: previous.status, datum: now } },
-    },
-  });
-
-  revalidatePath(`/arende/${caseId}`);
-}
-
-export async function revertToHosTa(caseId: string) {
-  const user = await requireUser();
-  const current = await prisma.case.findUnique({ where: { id: caseId } });
-  if (!current) return;
-  const isOwnerPL = user.id === current.skapadAvId || user.role === "ADMIN";
-  if (!isOwnerPL) throw new Error("Du har inte behörighet att backa det här ärendet.");
-  if (!current.tilldeladTAId) throw new Error("Ärendet har ingen tilldelad TA-plansritare att skicka tillbaka till.");
-  if (current.status === "NY" || current.status === "HOS_TA") {
-    throw new Error("Ärendet är redan hos TA-plansritaren.");
-  }
-
-  const now = new Date();
-  await prisma.case.update({
-    where: { id: caseId },
-    data: {
-      status: "HOS_TA",
-      historyEntries: { create: { text: "Ärendet backat hela vägen till TA-plansritaren", userId: user.id, datum: now } },
-      statusLog: { create: { status: "HOS_TA", datum: now } },
-    },
-  });
+    }),
+  ]);
 
   revalidatePath(`/arende/${caseId}`);
 }
