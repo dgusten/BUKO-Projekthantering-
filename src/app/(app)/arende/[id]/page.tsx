@@ -14,6 +14,7 @@ import {
   addTimeEntry,
   deleteTimeEntry,
   revertStatus,
+  revertToHosTa,
 } from "@/app/actions";
 import { tillstandStatus } from "@/lib/tillstand";
 import SketchMap from "@/components/SketchMap";
@@ -73,9 +74,12 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
   const goTillbakaEfterAvslag = transitionStatus.bind(null, c.id, "HOS_TA", "Skickat tillbaka till TA-plansritare efter avslag");
   const goAvslutat = transitionStatus.bind(null, c.id, "AVSLUTAT", "Ärende avslutat");
   const revertStatusForCase = revertStatus.bind(null, c.id);
+  const revertToHosTaForCase = revertToHosTa.bind(null, c.id);
 
   const previousStatus = c.statusLog.length > 1 ? c.statusLog[c.statusLog.length - 2].status : null;
   const canRevert = isOwnerPL && previousStatus !== null;
+  const canRevertToHosTa =
+    isOwnerPL && !!c.tilldeladTAId && !["NY", "HOS_TA"].includes(c.status) && previousStatus !== "HOS_TA";
   const canAdminForceClose = user.role === "ADMIN" && !["TILLSTAND_AVSLAG", "TILLSTAND_BEVILJAT", "AVSLUTAT"].includes(c.status);
   const hasAnyAction =
     canAssignTA ||
@@ -423,6 +427,14 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
                   <form action={revertStatusForCase} style={{ marginTop: 10 }}>
                     <button type="submit" className="btn btn-sm btn-block btn-ghost">
                       ↩️ Backa till &quot;{STATUS_META[previousStatus!].label}&quot;
+                    </button>
+                  </form>
+                )}
+
+                {canRevertToHosTa && (
+                  <form action={revertToHosTaForCase} style={{ marginTop: 10 }}>
+                    <button type="submit" className="btn btn-sm btn-block btn-ghost">
+                      ⏮️ Backa hela vägen till TA-plansritaren
                     </button>
                   </form>
                 )}

@@ -318,6 +318,30 @@ export async function revertStatus(caseId: string) {
   revalidatePath(`/arende/${caseId}`);
 }
 
+export async function revertToHosTa(caseId: string) {
+  const user = await requireUser();
+  const current = await prisma.case.findUnique({ where: { id: caseId } });
+  if (!current) return;
+  const isOwnerPL = user.id === current.skapadAvId || user.role === "ADMIN";
+  if (!isOwnerPL) throw new Error("Du har inte behörighet att backa det här ärendet.");
+  if (!current.tilldeladTAId) throw new Error("Ärendet har ingen tilldelad TA-plansritare att skicka tillbaka till.");
+  if (current.status === "NY" || current.status === "HOS_TA") {
+    throw new Error("Ärendet är redan hos TA-plansritaren.");
+  }
+
+  const now = new Date();
+  await prisma.case.update({
+    where: { id: caseId },
+    data: {
+      status: "HOS_TA",
+      historyEntries: { create: { text: "Ärendet backat hela vägen till TA-plansritaren", userId: user.id, datum: now } },
+      statusLog: { create: { status: "HOS_TA", datum: now } },
+    },
+  });
+
+  revalidatePath(`/arende/${caseId}`);
+}
+
 export async function saveTillstand(caseId: string, formData: FormData) {
   const user = await requireUser();
 
