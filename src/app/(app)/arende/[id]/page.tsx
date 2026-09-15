@@ -17,6 +17,7 @@ import {
 } from "@/app/actions";
 import { tillstandStatus } from "@/lib/tillstand";
 import SketchMap from "@/components/SketchMap";
+import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 
 export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
   const { id } = await props.params;
@@ -84,8 +85,7 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
     (c.status === "TILLSTAND_SOKT" && isOwnerPL) ||
     (c.status === "TILLSTAND_AVSLAG" && isOwnerPL) ||
     (c.status === "TILLSTAND_BEVILJAT" && isOwnerPL) ||
-    canAdminForceClose ||
-    canRevert;
+    canAdminForceClose;
 
   return (
     <>
@@ -112,11 +112,23 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
                 {severity.label}
               </span>
             </div>
-            {isOwnerPL && (
-              <Link href={`/skapa?kopieraFran=${c.id}`} className="btn btn-sm">
-                📋 Kopiera ärende (ny etapp)
-              </Link>
-            )}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {isOwnerPL && (
+                <Link href={`/skapa?kopieraFran=${c.id}`} className="btn btn-sm">
+                  📋 Kopiera ärende (ny etapp)
+                </Link>
+              )}
+              {canRevert && (
+                <form action={revertStatusForCase}>
+                  <ConfirmSubmitButton
+                    className="btn btn-sm"
+                    confirmText={`Backa ärendet till föregående steg ("${STATUS_META[previousStatus!].label}")?`}
+                  >
+                    ↩️ Backa till föregående steg
+                  </ConfirmSubmitButton>
+                </form>
+              )}
+            </div>
           </div>
 
           <div className="detail-grid">
@@ -415,14 +427,6 @@ export default async function CaseDetailPage(props: PageProps<"/arende/[id]">) {
                   <form action={goAvslutat}>
                     <button type="submit" className="btn btn-block">
                       Avsluta ärende (admin)
-                    </button>
-                  </form>
-                )}
-
-                {canRevert && (
-                  <form action={revertStatusForCase} style={{ marginTop: 10 }}>
-                    <button type="submit" className="btn btn-sm btn-block btn-ghost">
-                      Backa till föregående steg
                     </button>
                   </form>
                 )}
